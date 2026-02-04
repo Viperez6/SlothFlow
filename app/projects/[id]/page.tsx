@@ -3,7 +3,9 @@ import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import KanbanBoard from '@/components/KanbanBoard'
 import { Logo } from '@/components/Logo'
-import { ArrowLeft, Settings } from 'lucide-react'
+import { DocumentsList } from '@/components/documents/DocumentsList'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ArrowLeft, LayoutGrid, FileText } from 'lucide-react'
 
 interface ProjectPageProps {
   params: { id: string }
@@ -79,9 +81,34 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         </div>
       </header>
 
-      {/* Kanban Board */}
+      {/* Main Content with Tabs */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <KanbanBoard projectId={id} initialTasks={tasks || []} />
+        <Tabs defaultValue="board" className="space-y-6">
+          <TabsList className="bg-white/60 glass border border-moss-100 p-1">
+            <TabsTrigger
+              value="board"
+              className="data-[state=active]:bg-moss-gradient data-[state=active]:text-white font-display font-semibold"
+            >
+              <LayoutGrid className="w-4 h-4 mr-2" />
+              Tablero
+            </TabsTrigger>
+            <TabsTrigger
+              value="documents"
+              className="data-[state=active]:bg-moss-gradient data-[state=active]:text-white font-display font-semibold"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Documentos
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="board" className="mt-6">
+            <KanbanBoard projectId={id} initialTasks={tasks || []} />
+          </TabsContent>
+
+          <TabsContent value="documents" className="mt-6">
+            <DocumentsList projectId={id} />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   )

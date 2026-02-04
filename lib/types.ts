@@ -51,3 +51,39 @@ export interface VotingSessionWithVotes extends VotingSession {
   votes: Vote[]
   task?: Task
 }
+
+// Document types
+export type DocumentType = 'general' | 'prd' | 'spec' | 'meeting_notes' | 'retrospective'
+
+export interface Document {
+  id: string
+  project_id: string
+  title: string
+  content: string
+  type: DocumentType
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DocumentTask {
+  document_id: string
+  task_id: string
+  created_at: string
+}
+
+export interface DocumentWithTasks extends Document {
+  tasks?: Task[]
+}
+
+export interface TaskWithDocuments extends Task {
+  documents?: Document[]
+}
+
+export const DOCUMENT_TYPES = {
+  general: { label: 'General', icon: '📄', color: 'bg-slate-100 text-slate-700' },
+  prd: { label: 'PRD', icon: '📋', color: 'bg-blue-100 text-blue-700' },
+  spec: { label: 'Technical Spec', icon: '⚙️', color: 'bg-purple-100 text-purple-700' },
+  meeting_notes: { label: 'Meeting Notes', icon: '📝', color: 'bg-amber-100 text-amber-700' },
+  retrospective: { label: 'Retrospective', icon: '🔄', color: 'bg-moss-100 text-moss-700' },
+} as const

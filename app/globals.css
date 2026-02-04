@@ -225,3 +225,197 @@
     background: hsl(120 25% 55%);
   }
 }
+
+/* TipTap Editor Styles */
+.ProseMirror {
+  @apply text-gray-900 outline-none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply text-gray-400 float-left h-0 pointer-events-none;
+}
+
+.ProseMirror > * + * {
+  margin-top: 0.75em;
+}
+
+.ProseMirror h1 {
+  @apply text-3xl font-display font-bold mt-8 mb-4 text-gray-900;
+}
+
+.ProseMirror h2 {
+  @apply text-2xl font-display font-semibold mt-6 mb-3 text-gray-800;
+}
+
+.ProseMirror h3 {
+  @apply text-xl font-display font-semibold mt-4 mb-2 text-gray-800;
+}
+
+.ProseMirror p {
+  @apply leading-relaxed;
+}
+
+.ProseMirror code {
+  @apply bg-moss-100 text-moss-800 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.ProseMirror pre {
+  @apply bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto my-4;
+}
+
+.ProseMirror pre code {
+  @apply bg-transparent text-gray-100 p-0;
+}
+
+.ProseMirror blockquote {
+  @apply border-l-4 border-moss-400 pl-4 italic text-gray-700 my-4;
+}
+
+.ProseMirror table {
+  @apply border-collapse w-full my-4;
+}
+
+.ProseMirror td,
+.ProseMirror th {
+  @apply border border-gray-300 px-3 py-2 text-left align-top;
+}
+
+.ProseMirror th {
+  @apply bg-gray-100 font-semibold;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  @apply pl-6 my-4;
+}
+
+.ProseMirror ul {
+  @apply list-disc;
+}
+
+.ProseMirror ol {
+  @apply list-decimal;
+}
+
+.ProseMirror li {
+  @apply my-1;
+}
+
+.ProseMirror ul[data-type="taskList"] {
+  @apply list-none pl-0;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+  @apply flex items-start gap-2 my-1;
+}
+
+.ProseMirror ul[data-type="taskList"] li > label {
+  @apply flex items-center gap-2;
+}
+
+.ProseMirror ul[data-type="taskList"] li > label > input[type="checkbox"] {
+  @apply mt-1 cursor-pointer accent-moss-600;
+}
+
+.ProseMirror ul[data-type="taskList"] li > div {
+  @apply flex-1;
+}
+
+.ProseMirror a {
+  @apply text-moss-600 hover:text-moss-800 underline cursor-pointer;
+}
+
+.ProseMirror hr {
+  @apply border-t border-gray-200 my-6;
+}
+
+.ProseMirror img {
+  @apply max-w-full h-auto rounded-lg;
+}
+
+.ProseMirror strong {
+  @apply font-bold;
+}
+
+.ProseMirror em {
+  @apply italic;
+}
+
+.ProseMirror s {
+  @apply line-through;
+}
+
+/* Prose styles for markdown viewer */
+.prose {
+  @apply text-gray-900 max-w-none;
+}
+
+.prose h1 {
+  @apply text-3xl font-display font-bold text-gray-900 mt-8 mb-4;
+}
+
+.prose h2 {
+  @apply text-2xl font-display font-semibold text-gray-800 mt-6 mb-3;
+}
+
+.prose h3 {
+  @apply text-xl font-display font-semibold text-gray-800 mt-4 mb-2;
+}
+
+.prose p {
+  @apply leading-relaxed my-4;
+}
+
+.prose code {
+  @apply bg-moss-100 text-moss-800 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.prose pre {
+  @apply bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto my-4;
+}
+
+.prose pre code {
+  @apply bg-transparent text-gray-100 p-0;
+}
+
+.prose blockquote {
+  @apply border-l-4 border-moss-400 pl-4 italic text-gray-700 my-4;
+}
+
+.prose table {
+  @apply w-full border-collapse my-4;
+}
+
+.prose th,
+.prose td {
+  @apply border border-gray-300 px-4 py-2 text-left;
+}
+
+.prose th {
+  @apply bg-gray-100 font-semibold;
+}
+
+.prose ul {
+  @apply list-disc pl-6 my-4;
+}
+
+.prose ol {
+  @apply list-decimal pl-6 my-4;
+}
+
+.prose li {
+  @apply my-1;
+}
+
+.prose a {
+  @apply text-moss-600 hover:text-moss-800 underline;
+}
+
+.prose strong {
+  @apply font-bold;
+}
+
+.prose em {
+  @apply italic;
+}

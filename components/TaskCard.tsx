@@ -83,7 +83,7 @@ export default function TaskCard({ task, onClick, index, isDragEnabled = false }
     }
   }
 
-  const cardContent = (isDragging: boolean = false, dragHandleProps?: any) => (
+  const cardContent = (isDragging: boolean = false) => (
     <Card
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
@@ -93,19 +93,18 @@ export default function TaskCard({ task, onClick, index, isDragEnabled = false }
         'border-moss-100 hover:border-moss-300',
         'hover:shadow-lg',
         isDragging && 'shadow-2xl rotate-2 scale-105 border-moss-400 bg-white',
-        !isDragging && 'hover:-translate-y-1'
+        !isDragging && 'hover:-translate-y-1',
+        isDragEnabled && 'cursor-grab active:cursor-grabbing'
       )}
     >
-      {/* Drag handle - only show when drag is enabled */}
+      {/* Drag indicator - show when drag is enabled */}
       {isDragEnabled && (
         <div
-          {...dragHandleProps}
           className={cn(
             'absolute top-2 left-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity',
-            'hover:bg-moss-100 cursor-grab active:cursor-grabbing',
+            'bg-moss-100/50',
             isDragging && 'opacity-100'
           )}
-          onClick={(e) => e.stopPropagation()}
         >
           <GripVertical className="w-4 h-4 text-moss-400" />
         </div>
@@ -216,11 +215,12 @@ export default function TaskCard({ task, onClick, index, isDragEnabled = false }
         <div
           ref={provided.innerRef}
           {...provided.draggableProps}
+          {...provided.dragHandleProps}
           style={{
             ...provided.draggableProps.style,
           }}
         >
-          {cardContent(snapshot.isDragging, provided.dragHandleProps)}
+          {cardContent(snapshot.isDragging)}
         </div>
       )}
     </Draggable>
