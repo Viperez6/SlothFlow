@@ -96,13 +96,13 @@ export function DocumentView({ document, projectId, projectName }: DocumentViewP
       .replace(/&gt;/g, '>')
       .trim()
 
-    const blob = new Blob([`# ${document.title}\n\n${markdown}`], { type: 'text/markdown' })
-    const url = URL.createObjectURL(blob)
-    const a = window.document.createElement('a')
-    a.href = url
-    a.download = `${document.title.toLowerCase().replace(/\s+/g, '-')}.md`
-    a.click()
-    URL.revokeObjectURL(url)
+    const markdownBlob = new Blob([`# ${document.title}\n\n${markdown}`], { type: 'text/markdown' })
+    const blobUrl = URL.createObjectURL(markdownBlob)
+    const downloadLink = window.document.createElement('a')
+    downloadLink.href = blobUrl
+    downloadLink.download = `${document.title.toLowerCase().replace(/\s+/g, '-')}.md`
+    downloadLink.click()
+    URL.revokeObjectURL(blobUrl)
   }
 
   return (

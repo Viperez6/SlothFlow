@@ -89,13 +89,13 @@ export function TaskDocumentView({ task, taskDocument, projectId }: TaskDocument
       .replace(/&gt;/g, '>')
       .trim()
 
-    const blob = new Blob([`# ${taskDocument.title}\n\n${markdown}`], { type: 'text/markdown' })
-    const url = URL.createObjectURL(blob)
-    const a = window.document.createElement('a')
-    a.href = url
-    a.download = `${taskDocument.title.toLowerCase().replace(/\s+/g, '-')}.md`
-    a.click()
-    URL.revokeObjectURL(url)
+    const markdownBlob = new Blob([`# ${taskDocument.title}\n\n${markdown}`], { type: 'text/markdown' })
+    const blobUrl = URL.createObjectURL(markdownBlob)
+    const downloadLink = window.document.createElement('a')
+    downloadLink.href = blobUrl
+    downloadLink.download = `${taskDocument.title.toLowerCase().replace(/\s+/g, '-')}.md`
+    downloadLink.click()
+    URL.revokeObjectURL(blobUrl)
   }
 
   return (
