@@ -98,13 +98,11 @@ export function DocumentView({ document, projectId, projectName }: DocumentViewP
 
     const blob = new Blob([`# ${document.title}\n\n${markdown}`], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement ? window.document.createElement('a') : null
-    if (a) {
-      a.href = url
-      a.download = `${document.title.toLowerCase().replace(/\s+/g, '-')}.md`
-      a.click()
-      URL.revokeObjectURL(url)
-    }
+    const a = window.document.createElement('a')
+    a.href = url
+    a.download = `${document.title.toLowerCase().replace(/\s+/g, '-')}.md`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
