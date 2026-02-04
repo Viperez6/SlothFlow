@@ -4,11 +4,11 @@ import { Document, DOCUMENT_TYPES } from '@/lib/types'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { FileText, Clock, LinkIcon } from 'lucide-react'
+import { Clock } from 'lucide-react'
 import Link from 'next/link'
 
 interface DocumentCardProps {
-  document: Document & { task_count?: number }
+  document: Document
   projectId: string
 }
 
@@ -70,18 +70,11 @@ export function DocumentCard({ document, projectId }: DocumentCardProps) {
           </p>
 
           {/* Footer */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
               <span>{formatDate(document.updated_at)}</span>
             </div>
-
-            {document.task_count !== undefined && document.task_count > 0 && (
-              <div className="flex items-center gap-1 text-moss-600">
-                <LinkIcon className="w-3 h-3" />
-                <span>{document.task_count} tarea{document.task_count !== 1 ? 's' : ''}</span>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>

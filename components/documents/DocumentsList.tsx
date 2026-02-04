@@ -14,11 +14,11 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 interface DocumentsListProps {
   projectId: string
-  initialDocuments?: (Document & { task_count?: number })[]
+  initialDocuments?: Document[]
 }
 
 export function DocumentsList({ projectId, initialDocuments = [] }: DocumentsListProps) {
-  const [documents, setDocuments] = useState<(Document & { task_count?: number })[]>(initialDocuments)
+  const [documents, setDocuments] = useState<Document[]>(initialDocuments)
   const [loading, setLoading] = useState(!initialDocuments.length)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<DocumentType | 'all'>('all')
@@ -39,22 +39,14 @@ export function DocumentsList({ projectId, initialDocuments = [] }: DocumentsLis
       try {
         const supabase = getSupabase()
         const { data, error } = await supabase
-          .from('documents')
-          .select(`
-            *,
-            document_tasks(count)
-          `)
+          .from('project_documents')
+          .select('*')
           .eq('project_id', projectId)
           .order('updated_at', { ascending: false })
 
         if (error) throw error
 
-        const docsWithCount = data?.map(doc => ({
-          ...doc,
-          task_count: doc.document_tasks?.[0]?.count || 0
-        })) || []
-
-        setDocuments(docsWithCount)
+        setDocuments(data || [])
       } catch (error) {
         console.error('Error loading documents:', error)
       } finally {

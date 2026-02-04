@@ -1,12 +1,12 @@
 import { createClient } from '@/lib/supabase-server'
 import { redirect, notFound } from 'next/navigation'
-import { DocumentView } from './DocumentView'
+import { TaskDocumentView } from './TaskDocumentView'
 
 interface Props {
-  params: { id: string; documentId: string }
+  params: { id: string; taskId: string }
 }
 
-export default async function DocumentPage({ params }: Props) {
+export default async function TaskDocumentPage({ params }: Props) {
   const supabase = await createClient()
 
   // Check auth
@@ -26,21 +26,33 @@ export default async function DocumentPage({ params }: Props) {
     redirect('/projects')
   }
 
-  // Get document
-  const { data: document, error: docError } = await supabase
-    .from('project_documents')
+  // Get task
+  const { data: task, error: taskError } = await supabase
+    .from('tasks')
     .select('*')
-    .eq('id', params.documentId)
+    .eq('id', params.taskId)
     .eq('project_id', params.id)
     .single()
 
-  if (docError || !document) {
+  if (taskError || !task) {
     notFound()
+  }
+
+  // Get task document
+  const { data: taskDocument, error: docError } = await supabase
+    .from('task_documents')
+    .select('*')
+    .eq('task_id', params.taskId)
+    .maybeSingle()
+
+  if (!taskDocument) {
+    // Redirect to create page if no document exists
+    redirect(`/projects/${params.id}/tasks/${params.taskId}/document/new`)
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-moss-50 via-earth-50 to-sloth-50">
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
           <a href="/projects" className="hover:text-moss-600 transition-colors">Proyectos</a>
@@ -49,13 +61,17 @@ export default async function DocumentPage({ params }: Props) {
             {project.name}
           </a>
           <span>/</span>
-          <span className="text-sloth-800 font-medium">{document.title}</span>
+          <a href={`/projects/${params.id}/tasks/${params.taskId}`} className="hover:text-moss-600 transition-colors">
+            {task.title}
+          </a>
+          <span>/</span>
+          <span className="text-sloth-800 font-medium">Documento</span>
         </nav>
 
-        <DocumentView
-          document={document}
+        <TaskDocumentView
+          task={task}
+          taskDocument={taskDocument}
           projectId={params.id}
-          projectName={project.name}
         />
       </div>
     </div>

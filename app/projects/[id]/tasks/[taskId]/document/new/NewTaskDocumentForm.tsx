@@ -2,37 +2,49 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { DocumentType, DOCUMENT_TYPES } from '@/lib/types'
-import { getTemplateForType } from '@/lib/document-templates'
+import { Task } from '@/lib/types'
 import { MarkdownEditor } from '@/components/documents/MarkdownEditor'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { ArrowLeft, Save, Loader2 } from 'lucide-react'
 import Link from 'next/link'
-import { cn } from '@/lib/utils'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-interface NewDocumentFormProps {
+interface NewTaskDocumentFormProps {
+  task: Task
   projectId: string
-  userId: string
 }
 
-export function NewDocumentForm({ projectId, userId }: NewDocumentFormProps) {
+const DEFAULT_TEMPLATE = `<h2>Descripción Técnica</h2>
+<p>Describe en detalle la implementación técnica...</p>
+
+<h2>Análisis</h2>
+<p>Detalla el análisis realizado...</p>
+
+<h2>Decisiones de Diseño</h2>
+<ul>
+  <li>Decisión 1: ...</li>
+  <li>Decisión 2: ...</li>
+</ul>
+
+<h2>Consideraciones</h2>
+<p>Aspectos importantes a tener en cuenta...</p>
+
+<h2>Referencias</h2>
+<ul>
+  <li>Recurso 1</li>
+  <li>Recurso 2</li>
+</ul>
+`
+
+export function NewTaskDocumentForm({ task, projectId }: NewTaskDocumentFormProps) {
   const router = useRouter()
-  const [title, setTitle] = useState('')
-  const [type, setType] = useState<DocumentType>('general')
-  const [content, setContent] = useState(getTemplateForType('general'))
+  const [title, setTitle] = useState(`Documento: ${task.title}`)
+  const [content, setContent] = useState(DEFAULT_TEMPLATE)
   const [isSaving, setIsSaving] = useState(false)
   const supabaseRef = useRef<SupabaseClient | null>(null)
 
@@ -41,14 +53,6 @@ export function NewDocumentForm({ projectId, userId }: NewDocumentFormProps) {
       supabaseRef.current = createClient()
     }
     return supabaseRef.current
-  }
-
-  const handleTypeChange = (newType: DocumentType) => {
-    setType(newType)
-    // Only apply template if content is empty or still the default
-    if (!content || content === getTemplateForType(type)) {
-      setContent(getTemplateForType(newType))
-    }
   }
 
   const handleSave = async () => {
@@ -61,13 +65,11 @@ export function NewDocumentForm({ projectId, userId }: NewDocumentFormProps) {
     try {
       const supabase = getSupabase()
       const { data, error } = await supabase
-        .from('project_documents')
+        .from('task_documents')
         .insert({
-          project_id: projectId,
+          task_id: task.id,
           title: title.trim(),
-          type,
           content,
-          created_by: userId,
         })
         .select()
         .single()
@@ -78,7 +80,7 @@ export function NewDocumentForm({ projectId, userId }: NewDocumentFormProps) {
         description: 'El documento se ha guardado correctamente.'
       })
 
-      router.push(`/projects/${projectId}/documents/${data.id}`)
+      router.push(`/projects/${projectId}/tasks/${task.id}/document`)
     } catch (error) {
       console.error('Error saving document:', error)
       toast.error('Error al guardar', {
@@ -94,23 +96,23 @@ export function NewDocumentForm({ projectId, userId }: NewDocumentFormProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href={`/projects/${projectId}`}>
+          <Link href={`/projects/${projectId}/tasks/${task.id}`}>
             <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>
           <div>
-            <h1 className="font-display font-bold text-3xl text-sloth-800">
-              Nuevo Documento
-            </h1>
-            <p className="text-muted-foreground">
-              Crea un nuevo documento para el proyecto
+            <p className="text-sm text-muted-foreground mb-1">
+              Tarea: {task.title}
             </p>
+            <h1 className="font-display font-bold text-3xl text-sloth-800">
+              Nuevo Documento Detallado
+            </h1>
           </div>
         </div>
 
         <div className="flex gap-3">
-          <Link href={`/projects/${projectId}`}>
+          <Link href={`/projects/${projectId}/tasks/${task.id}`}>
             <Button variant="outline">Cancelar</Button>
           </Link>
           <Button
@@ -133,40 +135,16 @@ export function NewDocumentForm({ projectId, userId }: NewDocumentFormProps) {
         <CardHeader>
           <CardTitle className="font-display text-xl">Detalles del documento</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">Título *</Label>
-              <Input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Nombre del documento"
-                className="border-moss-200"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="type">Tipo de documento</Label>
-              <Select value={type} onValueChange={(v) => handleTypeChange(v as DocumentType)}>
-                <SelectTrigger className="border-moss-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(DOCUMENT_TYPES) as DocumentType[]).map(docType => {
-                    const config = DOCUMENT_TYPES[docType]
-                    return (
-                      <SelectItem key={docType} value={docType}>
-                        <span className="flex items-center gap-2">
-                          <span>{config.icon}</span>
-                          <span>{config.label}</span>
-                        </span>
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
+        <CardContent>
+          <div className="space-y-2">
+            <Label htmlFor="title">Título *</Label>
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Nombre del documento"
+              className="border-moss-200"
+            />
           </div>
         </CardContent>
       </Card>

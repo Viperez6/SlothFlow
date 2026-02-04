@@ -7,7 +7,7 @@ interface Props {
 }
 
 export default async function NewDocumentPage({ params }: Props) {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Check auth
   const { data: { user } } = await supabase.auth.getUser()

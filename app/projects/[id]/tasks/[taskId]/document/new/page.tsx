@@ -1,12 +1,12 @@
 import { createClient } from '@/lib/supabase-server'
 import { redirect, notFound } from 'next/navigation'
-import { DocumentView } from './DocumentView'
+import { NewTaskDocumentForm } from './NewTaskDocumentForm'
 
 interface Props {
-  params: { id: string; documentId: string }
+  params: { id: string; taskId: string }
 }
 
-export default async function DocumentPage({ params }: Props) {
+export default async function NewTaskDocumentPage({ params }: Props) {
   const supabase = await createClient()
 
   // Check auth
@@ -26,16 +26,28 @@ export default async function DocumentPage({ params }: Props) {
     redirect('/projects')
   }
 
-  // Get document
-  const { data: document, error: docError } = await supabase
-    .from('project_documents')
+  // Get task
+  const { data: task, error: taskError } = await supabase
+    .from('tasks')
     .select('*')
-    .eq('id', params.documentId)
+    .eq('id', params.taskId)
     .eq('project_id', params.id)
     .single()
 
-  if (docError || !document) {
+  if (taskError || !task) {
     notFound()
+  }
+
+  // Check if document already exists (1:1 relationship)
+  const { data: existingDoc } = await supabase
+    .from('task_documents')
+    .select('id')
+    .eq('task_id', params.taskId)
+    .maybeSingle()
+
+  if (existingDoc) {
+    // Redirect to edit if document already exists
+    redirect(`/projects/${params.id}/tasks/${params.taskId}/document/edit`)
   }
 
   return (
@@ -49,13 +61,16 @@ export default async function DocumentPage({ params }: Props) {
             {project.name}
           </a>
           <span>/</span>
-          <span className="text-sloth-800 font-medium">{document.title}</span>
+          <a href={`/projects/${params.id}/tasks/${params.taskId}`} className="hover:text-moss-600 transition-colors">
+            {task.title}
+          </a>
+          <span>/</span>
+          <span className="text-sloth-800 font-medium">Nuevo Documento</span>
         </nav>
 
-        <DocumentView
-          document={document}
+        <NewTaskDocumentForm
+          task={task}
           projectId={params.id}
-          projectName={project.name}
         />
       </div>
     </div>

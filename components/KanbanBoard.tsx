@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { DragDropContext, DropResult } from '@hello-pangea/dnd'
 import { Task, TaskStatus } from '@/lib/types'
 import KanbanColumn from './KanbanColumn'
@@ -16,9 +17,9 @@ interface KanbanBoardProps {
 }
 
 export default function KanbanBoard({ projectId, initialTasks }: KanbanBoardProps) {
+  const router = useRouter()
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>('backlog')
   const [isMounted, setIsMounted] = useState(false)
   const supabaseRef = useRef<SupabaseClient | null>(null)
@@ -35,13 +36,12 @@ export default function KanbanBoard({ projectId, initialTasks }: KanbanBoardProp
     return supabaseRef.current
   }
 
+  // Navigate to task detail page on click
   const handleTaskClick = (task: Task) => {
-    setSelectedTask(task)
-    setIsModalOpen(true)
+    router.push(`/projects/${projectId}/tasks/${task.id}`)
   }
 
   const handleAddTask = (status: TaskStatus) => {
-    setSelectedTask(null)
     setDefaultStatus(status)
     setIsModalOpen(true)
   }
@@ -110,78 +110,28 @@ export default function KanbanBoard({ projectId, initialTasks }: KanbanBoardProp
   const handleSaveTask = async (taskData: Partial<Task>) => {
     try {
       const supabase = getSupabase()
-      if (selectedTask) {
-        // Update existing task
-        const { data, error } = await supabase
-          .from('tasks')
-          .update({
-            title: taskData.title,
-            description: taskData.description,
-            story_points: taskData.story_points,
-            google_doc_link: taskData.google_doc_link,
-            status: taskData.status,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', selectedTask.id)
-          .select()
-          .single()
-
-        if (error) throw error
-
-        setTasks(tasks.map((t) => (t.id === selectedTask.id ? data : t)))
-        toast.success('Tarea actualizada', {
-          description: 'Los cambios han sido guardados correctamente.',
-        })
-      } else {
-        // Create new task
-        const { data, error } = await supabase
-          .from('tasks')
-          .insert({
-            project_id: projectId,
-            title: taskData.title,
-            description: taskData.description,
-            story_points: taskData.story_points,
-            google_doc_link: taskData.google_doc_link,
-            status: taskData.status || defaultStatus,
-          })
-          .select()
-          .single()
-
-        if (error) throw error
-
-        setTasks([...tasks, data])
-        toast.success('Tarea creada', {
-          description: 'La nueva tarea ha sido agregada al tablero.',
-        })
-      }
-    } catch (error) {
-      toast.error('Error al guardar', {
-        description: 'No se pudo guardar la tarea. Intenta de nuevo.',
-      })
-      console.error(error)
-      throw error
-    }
-  }
-
-  const handleDeleteTask = async () => {
-    if (!selectedTask) return
-
-    try {
-      const supabase = getSupabase()
-      const { error } = await supabase
+      // Create new task
+      const { data, error } = await supabase
         .from('tasks')
-        .delete()
-        .eq('id', selectedTask.id)
+        .insert({
+          project_id: projectId,
+          title: taskData.title,
+          description: taskData.description,
+          story_points: taskData.story_points,
+          status: taskData.status || defaultStatus,
+        })
+        .select()
+        .single()
 
       if (error) throw error
 
-      setTasks(tasks.filter((t) => t.id !== selectedTask.id))
-      toast.success('Tarea eliminada', {
-        description: 'La tarea ha sido removida del tablero.',
+      setTasks([...tasks, data])
+      toast.success('Tarea creada', {
+        description: 'La nueva tarea ha sido agregada al tablero.',
       })
     } catch (error) {
-      toast.error('Error al eliminar', {
-        description: 'No se pudo eliminar la tarea. Intenta de nuevo.',
+      toast.error('Error al guardar', {
+        description: 'No se pudo guardar la tarea. Intenta de nuevo.',
       })
       console.error(error)
       throw error
@@ -288,13 +238,8 @@ export default function KanbanBoard({ projectId, initialTasks }: KanbanBoardProp
 
       <TaskModal
         isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false)
-          setSelectedTask(null)
-        }}
+        onClose={() => setIsModalOpen(false)}
         onSave={handleSaveTask}
-        onDelete={selectedTask ? handleDeleteTask : undefined}
-        task={selectedTask}
       />
     </>
   )

@@ -14,7 +14,6 @@ export interface Task {
   description: string | null
   status: 'backlog' | 'in_progress' | 'done'
   story_points: number | null
-  google_doc_link: string | null
   created_at: string
   updated_at: string
 }
@@ -81,9 +80,71 @@ export interface TaskWithDocuments extends Task {
 }
 
 export const DOCUMENT_TYPES = {
-  general: { label: 'General', icon: '📄', color: 'bg-slate-100 text-slate-700' },
-  prd: { label: 'PRD', icon: '📋', color: 'bg-blue-100 text-blue-700' },
-  spec: { label: 'Technical Spec', icon: '⚙️', color: 'bg-purple-100 text-purple-700' },
-  meeting_notes: { label: 'Meeting Notes', icon: '📝', color: 'bg-amber-100 text-amber-700' },
-  retrospective: { label: 'Retrospective', icon: '🔄', color: 'bg-moss-100 text-moss-700' },
+  general: {
+    label: 'General',
+    icon: '📄',
+    color: 'bg-slate-100 text-slate-700',
+    description: 'Documentación general del proyecto'
+  },
+  prd: {
+    label: 'PRD',
+    icon: '📋',
+    color: 'bg-blue-100 text-blue-700',
+    description: 'Product Requirements Document'
+  },
+  spec: {
+    label: 'Technical Spec',
+    icon: '⚙️',
+    color: 'bg-purple-100 text-purple-700',
+    description: 'Especificación técnica'
+  },
+  meeting_notes: {
+    label: 'Meeting Notes',
+    icon: '📝',
+    color: 'bg-amber-100 text-amber-700',
+    description: 'Notas de reuniones'
+  },
+  retrospective: {
+    label: 'Retrospective',
+    icon: '🔄',
+    color: 'bg-moss-100 text-moss-700',
+    description: 'Retrospectiva de sprint'
+  },
+} as const
+
+// ==========================================
+// TASK DOCUMENTS Y LINKS - NUEVA ARQUITECTURA
+// ==========================================
+
+export type LinkType = 'github' | 'figma' | 'docs' | 'external' | 'other'
+
+export interface TaskDocument {
+  id: string
+  task_id: string
+  title: string
+  content: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TaskLink {
+  id: string
+  task_id: string
+  url: string
+  title: string | null
+  type: LinkType
+  created_at: string
+}
+
+export interface TaskWithDetails extends Task {
+  task_document?: TaskDocument | null
+  task_links?: TaskLink[]
+}
+
+export const LINK_TYPES = {
+  github: { label: 'GitHub', icon: '🔗', color: 'text-gray-900' },
+  figma: { label: 'Figma', icon: '🎨', color: 'text-purple-600' },
+  docs: { label: 'Documentation', icon: '📚', color: 'text-blue-600' },
+  external: { label: 'External', icon: '🌐', color: 'text-gray-600' },
+  other: { label: 'Other', icon: '📎', color: 'text-gray-500' },
 } as const

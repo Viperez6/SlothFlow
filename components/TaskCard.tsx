@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Draggable } from '@hello-pangea/dnd'
 import { Task } from '@/lib/types'
-import { ExternalLink, Users, Loader2, FileText, Sparkles, GripVertical } from 'lucide-react'
+import { Users, Loader2, FileText, Sparkles, GripVertical, Link as LinkIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +23,8 @@ export default function TaskCard({ task, onClick, index, isDragEnabled = false }
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+  const [hasDocument, setHasDocument] = useState(false)
+  const [linksCount, setLinksCount] = useState(0)
   const router = useRouter()
   const supabaseRef = useRef<SupabaseClient | null>(null)
 
@@ -49,6 +51,31 @@ export default function TaskCard({ task, onClick, index, isDragEnabled = false }
     }
     loadUserRole()
   }, [])
+
+  // Load task document and links count
+  useEffect(() => {
+    async function loadTaskDetails() {
+      const supabase = getSupabase()
+
+      // Check if task has a document
+      const { data: taskDoc } = await supabase
+        .from('task_documents')
+        .select('id')
+        .eq('task_id', task.id)
+        .maybeSingle()
+
+      setHasDocument(!!taskDoc)
+
+      // Get links count
+      const { count } = await supabase
+        .from('task_links')
+        .select('*', { count: 'exact', head: true })
+        .eq('task_id', task.id)
+
+      setLinksCount(count || 0)
+    }
+    loadTaskDetails()
+  }, [task.id])
 
   const createVotingSession = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -157,22 +184,24 @@ export default function TaskCard({ task, onClick, index, isDragEnabled = false }
             </Badge>
           )}
 
-          {task.google_doc_link && (
-            <a
-              href={task.google_doc_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className={cn(
-                "inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full",
-                "bg-earth-100 text-earth-700 hover:bg-earth-200",
-                "transition-all duration-200 group/link"
-              )}
+          {hasDocument && (
+            <Badge
+              variant="outline"
+              className="bg-earth-50 text-earth-700 border-earth-200"
             >
-              <FileText className="w-3 h-3" />
-              <span>Doc</span>
-              <ExternalLink className="w-3 h-3 opacity-0 -ml-1 group-hover/link:opacity-100 group-hover/link:ml-0 transition-all" />
-            </a>
+              <FileText className="w-3 h-3 mr-1" />
+              Doc
+            </Badge>
+          )}
+
+          {linksCount > 0 && (
+            <Badge
+              variant="outline"
+              className="bg-slate-50 text-slate-700 border-slate-200"
+            >
+              <LinkIcon className="w-3 h-3 mr-1" />
+              {linksCount}
+            </Badge>
           )}
         </div>
       </CardContent>

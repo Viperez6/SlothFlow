@@ -2,18 +2,11 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Document, DocumentType, DOCUMENT_TYPES } from '@/lib/types'
+import { Task, TaskDocument } from '@/lib/types'
 import { MarkdownEditor } from '@/components/documents/MarkdownEditor'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase'
 import { toast } from 'sonner'
@@ -21,16 +14,16 @@ import { ArrowLeft, Save, Loader2, Check } from 'lucide-react'
 import Link from 'next/link'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-interface EditDocumentFormProps {
-  document: Document
+interface EditTaskDocumentFormProps {
+  task: Task
+  taskDocument: TaskDocument
   projectId: string
 }
 
-export function EditDocumentForm({ document: initialDocument, projectId }: EditDocumentFormProps) {
+export function EditTaskDocumentForm({ task, taskDocument, projectId }: EditTaskDocumentFormProps) {
   const router = useRouter()
-  const [title, setTitle] = useState(initialDocument.title)
-  const [type, setType] = useState<DocumentType>(initialDocument.type)
-  const [content, setContent] = useState(initialDocument.content)
+  const [title, setTitle] = useState(taskDocument.title)
+  const [content, setContent] = useState(taskDocument.content)
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const supabaseRef = useRef<SupabaseClient | null>(null)
@@ -52,14 +45,13 @@ export function EditDocumentForm({ document: initialDocument, projectId }: EditD
     try {
       const supabase = getSupabase()
       const { error } = await supabase
-        .from('project_documents')
+        .from('task_documents')
         .update({
           title: title.trim(),
-          type,
           content,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', initialDocument.id)
+        .eq('id', taskDocument.id)
 
       if (error) throw error
 
@@ -79,12 +71,12 @@ export function EditDocumentForm({ document: initialDocument, projectId }: EditD
     } finally {
       setIsSaving(false)
     }
-  }, [title, type, content, initialDocument.id])
+  }, [title, content, taskDocument.id])
 
   const handleSaveAndReturn = async () => {
     const saved = await saveDocument(true)
     if (saved) {
-      router.push(`/projects/${projectId}/documents/${initialDocument.id}`)
+      router.push(`/projects/${projectId}/tasks/${task.id}/document`)
     }
   }
 
@@ -97,16 +89,19 @@ export function EditDocumentForm({ document: initialDocument, projectId }: EditD
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href={`/projects/${projectId}/documents/${initialDocument.id}`}>
+          <Link href={`/projects/${projectId}/tasks/${task.id}/document`}>
             <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>
           <div>
+            <p className="text-sm text-muted-foreground mb-1">
+              Tarea: {task.title}
+            </p>
             <h1 className="font-display font-bold text-3xl text-sloth-800">
               Editar Documento
             </h1>
-            <div className="flex items-center gap-3 text-muted-foreground text-sm">
+            <div className="flex items-center gap-3 text-muted-foreground text-sm mt-1">
               {lastSaved && (
                 <span className="flex items-center gap-1 text-moss-600">
                   <Check className="w-3.5 h-3.5" />
@@ -124,7 +119,7 @@ export function EditDocumentForm({ document: initialDocument, projectId }: EditD
         </div>
 
         <div className="flex gap-3">
-          <Link href={`/projects/${projectId}/documents/${initialDocument.id}`}>
+          <Link href={`/projects/${projectId}/tasks/${task.id}/document`}>
             <Button variant="outline">Cancelar</Button>
           </Link>
           <Button
@@ -147,40 +142,16 @@ export function EditDocumentForm({ document: initialDocument, projectId }: EditD
         <CardHeader>
           <CardTitle className="font-display text-xl">Detalles del documento</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">Título *</Label>
-              <Input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Nombre del documento"
-                className="border-moss-200"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="type">Tipo de documento</Label>
-              <Select value={type} onValueChange={(v) => setType(v as DocumentType)}>
-                <SelectTrigger className="border-moss-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(DOCUMENT_TYPES) as DocumentType[]).map(docType => {
-                    const config = DOCUMENT_TYPES[docType]
-                    return (
-                      <SelectItem key={docType} value={docType}>
-                        <span className="flex items-center gap-2">
-                          <span>{config.icon}</span>
-                          <span>{config.label}</span>
-                        </span>
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
+        <CardContent>
+          <div className="space-y-2">
+            <Label htmlFor="title">Título *</Label>
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Nombre del documento"
+              className="border-moss-200"
+            />
           </div>
         </CardContent>
       </Card>

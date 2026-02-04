@@ -7,7 +7,7 @@ interface Props {
 }
 
 export default async function EditDocumentPage({ params }: Props) {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Check auth
   const { data: { user } } = await supabase.auth.getUser()
@@ -28,7 +28,7 @@ export default async function EditDocumentPage({ params }: Props) {
 
   // Get document
   const { data: document, error: docError } = await supabase
-    .from('documents')
+    .from('project_documents')
     .select('*')
     .eq('id', params.documentId)
     .eq('project_id', params.id)
