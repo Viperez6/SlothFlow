@@ -20,11 +20,38 @@ export interface Task {
 
 export type TaskStatus = 'backlog' | 'in_progress' | 'done'
 
+// ==========================================
+// SLOTH AVATARS - Sistema de avatares
+// ==========================================
+
+export type SlothAvatarId = 'sloth-default' | 'sloth-happy' | 'sloth-sleepy' | 'sloth-cool' | 'sloth-heart' | 'sloth-star' | 'sloth-coffee' | 'sloth-zen'
+
+export const SLOTH_AVATARS: Record<SlothAvatarId, { image: string; label: string; bg: string }> = {
+  'sloth-default': { image: '/avatars/sloth-default.png', label: 'Perezoso', bg: 'bg-moss-100' },
+  'sloth-happy': { image: '/avatars/sloth-happy.png', label: 'Feliz', bg: 'bg-amber-100' },
+  'sloth-sleepy': { image: '/avatars/sloth-sleepy.png', label: 'Dormilón', bg: 'bg-blue-100' },
+  'sloth-cool': { image: '/avatars/sloth-cool.png', label: 'Cool', bg: 'bg-purple-100' },
+  'sloth-heart': { image: '/avatars/sloth-heart.png', label: 'Cariñoso', bg: 'bg-pink-100' },
+  'sloth-star': { image: '/avatars/sloth-star.png', label: 'Estrella', bg: 'bg-yellow-100' },
+  'sloth-coffee': { image: '/avatars/sloth-coffee.png', label: 'Cafetero', bg: 'bg-orange-100' },
+  'sloth-zen': { image: '/avatars/sloth-zen.png', label: 'Zen', bg: 'bg-teal-100' },
+} as const
+
 export interface Profile {
   id: string
   email: string | null
   full_name: string | null
   role: 'pm' | 'developer'
+  avatar: SlothAvatarId | null
+  created_at: string
+}
+
+// Guest voter for Planning Poker (no auth required)
+export interface GuestVoter {
+  id: string
+  session_id: string
+  name: string
+  avatar: SlothAvatarId
   created_at: string
 }
 
@@ -40,10 +67,12 @@ export interface VotingSession {
 export interface Vote {
   id: string
   session_id: string
-  user_id: string
+  user_id: string | null      // null for guest voters
+  guest_id: string | null     // for guest voters
   story_points: number
   created_at: string
-  profiles?: Profile
+  profiles?: Profile          // for registered users
+  guest_voters?: GuestVoter   // for guest voters
 }
 
 export interface VotingSessionWithVotes extends VotingSession {

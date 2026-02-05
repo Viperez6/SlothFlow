@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Project } from '@/lib/types'
-import { Plus, FolderOpen, LogOut, Trash2, Calendar, ArrowRight } from 'lucide-react'
+import { Plus, FolderOpen, Trash2, Calendar, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import { SlothPageLoader, SlothSpinner } from '@/components/SlothLoader'
 import { Logo } from '@/components/Logo'
+import { UserMenu } from '@/components/UserMenu'
 import { cn } from '@/lib/utils'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -126,16 +127,6 @@ export default function ProjectsPage() {
     }
   }
 
-  const handleLogout = async () => {
-    const supabase = getSupabase()
-    await supabase.auth.signOut()
-    toast.success('Sesión cerrada', {
-      description: 'Hasta pronto!',
-    })
-    router.push('/login')
-    router.refresh()
-  }
-
   if (loading) {
     return <SlothPageLoader message="Cargando tus proyectos" />
   }
@@ -149,14 +140,7 @@ export default function ProjectsPage() {
             <Logo size="sm" />
             <h1 className="text-2xl font-display font-bold text-sloth-800">SlothFlow</h1>
           </div>
-          <Button
-            variant="ghost"
-            onClick={handleLogout}
-            className="text-muted-foreground hover:text-moss-700 hover:bg-moss-100"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Cerrar sesión
-          </Button>
+          <UserMenu />
         </div>
       </header>
 

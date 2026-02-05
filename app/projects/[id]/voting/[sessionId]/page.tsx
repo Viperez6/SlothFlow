@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
-import { VotingSession, Vote, Task, Profile } from '@/lib/types'
-import { ArrowLeft, Eye, EyeOff, Users, Sparkles, CheckCircle2, Trophy } from 'lucide-react'
+import { VotingSession, Vote, Task, Profile, GuestVoter, SLOTH_AVATARS, SlothAvatarId } from '@/lib/types'
+import { SlothAvatarDisplay } from '@/components/SlothAvatarSelector'
+import { ArrowLeft, Eye, EyeOff, Users, Sparkles, CheckCircle2, Trophy, Share2, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +19,14 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 const FIBONACCI_NUMBERS = [1, 2, 3, 5, 8, 13, 21, 34]
 
+interface CurrentVoter {
+  type: 'user' | 'guest'
+  id: string
+  name: string
+  avatar: SlothAvatarId | null
+  role?: string
+}
+
 export default function VotingPage() {
   const params = useParams()
   const projectId = params.id as string
@@ -26,7 +35,7 @@ export default function VotingPage() {
   const [session, setSession] = useState<VotingSession | null>(null)
   const [task, setTask] = useState<Task | null>(null)
   const [votes, setVotes] = useState<Vote[]>([])
-  const [currentProfile, setCurrentProfile] = useState<Profile | null>(null)
+  const [currentVoter, setCurrentVoter] = useState<CurrentVoter | null>(null)
   const [myVote, setMyVote] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [voting, setVoting] = useState(false)
@@ -95,20 +104,68 @@ export default function VotingPage() {
     try {
       const supabase = getSupabase()
 
+      // Check for authenticated user first
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return
+
+      if (user) {
+        // Authenticated user
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+
+        setCurrentVoter({
+          type: 'user',
+          id: user.id,
+          name: profile?.full_name || profile?.email || 'Usuario',
+          avatar: profile?.avatar || 'sloth-default',
+          role: profile?.role,
+        })
+
+        // Check for existing vote
+        const { data: myVoteData } = await supabase
+          .from('votes')
+          .select('story_points')
+          .eq('session_id', sessionId)
+          .eq('user_id', user.id)
+          .single()
+
+        if (myVoteData) {
+          setMyVote(myVoteData.story_points)
+        }
+      } else {
+        // Check for guest in localStorage
+        const guestData = localStorage.getItem(`guest_${sessionId}`)
+
+        if (!guestData) {
+          // No auth and no guest - redirect to join page
+          router.push(`/projects/${projectId}/voting/${sessionId}/join`)
+          return
+        }
+
+        const guest = JSON.parse(guestData) as GuestVoter
+        setCurrentVoter({
+          type: 'guest',
+          id: guest.id,
+          name: guest.name,
+          avatar: guest.avatar,
+        })
+
+        // Check for existing guest vote
+        const { data: myVoteData } = await supabase
+          .from('votes')
+          .select('story_points')
+          .eq('session_id', sessionId)
+          .eq('guest_id', guest.id)
+          .single()
+
+        if (myVoteData) {
+          setMyVote(myVoteData.story_points)
+        }
       }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      setCurrentProfile(profile)
-
+      // Load session
       const { data: sessionData, error: sessionError } = await supabase
         .from('voting_sessions')
         .select('*')
@@ -123,6 +180,7 @@ export default function VotingPage() {
 
       setSession(sessionData)
 
+      // Load task
       const { data: taskData } = await supabase
         .from('tasks')
         .select('*')
@@ -131,17 +189,6 @@ export default function VotingPage() {
 
       setTask(taskData)
       await loadVotes()
-
-      const { data: myVoteData } = await supabase
-        .from('votes')
-        .select('story_points')
-        .eq('session_id', sessionId)
-        .eq('user_id', user.id)
-        .single()
-
-      if (myVoteData) {
-        setMyVote(myVoteData.story_points)
-      }
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
@@ -160,7 +207,13 @@ export default function VotingPage() {
             id,
             email,
             full_name,
-            role
+            role,
+            avatar
+          ),
+          guest_voters:guest_id (
+            id,
+            name,
+            avatar
           )
         `)
         .eq('session_id', sessionId)
@@ -174,24 +227,19 @@ export default function VotingPage() {
   }
 
   const handleVote = async (points: number) => {
-    if (voting || myVote !== null) return
+    if (voting || myVote !== null || !currentVoter) return
 
     setVoting(true)
     try {
       const supabase = getSupabase()
-      const { data: { user } } = await supabase.auth.getUser()
 
-      if (!user) return
+      const voteData = currentVoter.type === 'user'
+        ? { session_id: sessionId, user_id: currentVoter.id, story_points: points }
+        : { session_id: sessionId, guest_id: currentVoter.id, story_points: points }
 
       const { error } = await supabase
         .from('votes')
-        .upsert({
-          session_id: sessionId,
-          user_id: user.id,
-          story_points: points
-        }, {
-          onConflict: 'session_id,user_id'
-        })
+        .insert(voteData)
 
       if (error) throw error
       setMyVote(points)
@@ -259,15 +307,36 @@ export default function VotingPage() {
     }
   }
 
+  const copyShareLink = () => {
+    const joinUrl = `${window.location.origin}/projects/${projectId}/voting/${sessionId}/join`
+    navigator.clipboard.writeText(joinUrl)
+    toast.success('Enlace copiado', {
+      description: 'Comparte este enlace con tu equipo',
+    })
+  }
+
   const getVoteCount = (points: number) => {
     return votes.filter(v => v.story_points === points).length
   }
 
-  const getInitials = (name: string | null, email: string | null) => {
-    if (name) {
-      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+  const getVoterDisplay = (vote: Vote) => {
+    if (vote.profiles) {
+      return {
+        name: vote.profiles.full_name || vote.profiles.email || 'Usuario',
+        avatar: vote.profiles.avatar as SlothAvatarId || 'sloth-default',
+        role: vote.profiles.role,
+        isGuest: false,
+      }
     }
-    return email?.slice(0, 2).toUpperCase() || '??'
+    if (vote.guest_voters) {
+      return {
+        name: vote.guest_voters.name,
+        avatar: vote.guest_voters.avatar as SlothAvatarId,
+        role: null,
+        isGuest: true,
+      }
+    }
+    return { name: 'Anónimo', avatar: 'sloth-default' as SlothAvatarId, role: null, isGuest: true }
   }
 
   if (loading) {
@@ -275,7 +344,7 @@ export default function VotingPage() {
   }
 
   const isRevealed = session?.status === 'revealed'
-  const isPM = currentProfile?.role === 'pm'
+  const isPM = currentVoter?.type === 'user' && currentVoter?.role === 'pm'
   const hasVoted = myVote !== null
 
   // Calculate average and consensus
@@ -333,12 +402,36 @@ export default function VotingPage() {
               )}
             </div>
 
-            {/* Live indicator */}
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-moss-100 rounded-full">
-              <span className="w-2 h-2 bg-moss-500 rounded-full animate-pulse" />
-              <span className="text-sm font-medium text-moss-700">En vivo</span>
+            <div className="flex items-center gap-3">
+              {/* Share button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyShareLink}
+                className="gap-2"
+              >
+                <Share2 className="w-4 h-4" />
+                Invitar
+              </Button>
+
+              {/* Live indicator */}
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-moss-100 rounded-full">
+                <span className="w-2 h-2 bg-moss-500 rounded-full animate-pulse" />
+                <span className="text-sm font-medium text-moss-700">En vivo</span>
+              </div>
             </div>
           </div>
+
+          {/* Current voter info */}
+          {currentVoter && (
+            <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+              <SlothAvatarDisplay avatarId={currentVoter.avatar} size="xs" />
+              <span>Votando como <strong className="text-sloth-700">{currentVoter.name}</strong></span>
+              {currentVoter.type === 'guest' && (
+                <Badge variant="outline" className="text-xs">Invitado</Badge>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -444,52 +537,51 @@ export default function VotingPage() {
             </Card>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {votes.map((vote, index) => (
-                <Card
-                  key={vote.id}
-                  className={cn(
-                    'overflow-hidden animate-fade-in opacity-0',
-                    'hover:shadow-md transition-shadow'
-                  )}
-                  style={{
-                    animationDelay: `${index * 0.1}s`,
-                    animationFillMode: 'forwards'
-                  }}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10 bg-moss-gradient">
-                        <AvatarFallback className="bg-moss-gradient text-white font-display font-bold">
-                          {getInitials(vote.profiles?.full_name || null, vote.profiles?.email || null)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sloth-800 truncate">
-                          {vote.profiles?.full_name || vote.profiles?.email || 'Usuario'}
-                        </p>
-                        <Badge variant="outline" className="text-xs capitalize">
-                          {vote.profiles?.role}
-                        </Badge>
+              {votes.map((vote, index) => {
+                const voter = getVoterDisplay(vote)
+                return (
+                  <Card
+                    key={vote.id}
+                    className={cn(
+                      'overflow-hidden animate-fade-in opacity-0',
+                      'hover:shadow-md transition-shadow'
+                    )}
+                    style={{
+                      animationDelay: `${index * 0.1}s`,
+                      animationFillMode: 'forwards'
+                    }}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <SlothAvatarDisplay avatarId={voter.avatar} size="sm" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sloth-800 truncate">
+                            {voter.name}
+                          </p>
+                          <Badge variant="outline" className="text-xs capitalize">
+                            {voter.isGuest ? 'Invitado' : voter.role}
+                          </Badge>
+                        </div>
+                        <div className={cn(
+                          'w-12 h-12 rounded-xl flex items-center justify-center',
+                          'transition-all duration-300',
+                          isRevealed
+                            ? 'bg-moss-gradient text-white'
+                            : 'bg-earth-100'
+                        )}>
+                          {isRevealed ? (
+                            <span className="text-xl font-display font-bold">
+                              {vote.story_points}
+                            </span>
+                          ) : (
+                            <EyeOff className="w-5 h-5 text-earth-400" />
+                          )}
+                        </div>
                       </div>
-                      <div className={cn(
-                        'w-12 h-12 rounded-xl flex items-center justify-center',
-                        'transition-all duration-300',
-                        isRevealed
-                          ? 'bg-moss-gradient text-white'
-                          : 'bg-earth-100'
-                      )}>
-                        {isRevealed ? (
-                          <span className="text-xl font-display font-bold">
-                            {vote.story_points}
-                          </span>
-                        ) : (
-                          <EyeOff className="w-5 h-5 text-earth-400" />
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </section>
