@@ -4,9 +4,8 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Draggable } from '@hello-pangea/dnd'
 import { Task } from '@/lib/types'
-import { Users, Loader2, FileText, Sparkles, GripVertical, Link as LinkIcon } from 'lucide-react'
+import { Loader2, FileText, Sparkles, GripVertical, Link as LinkIcon, SquareStack } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -22,6 +21,34 @@ interface TaskCardProps {
   linksCount: number
 }
 
+/**
+ * Strips markdown syntax from text for clean preview display
+ */
+function stripMarkdown(text: string): string {
+  return text
+    // Remove headers (## Header)
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove bold/italic (**text**, *text*, __text__, _text_)
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    // Remove inline code (`code`)
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove links [text](url)
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove images ![alt](url)
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    // Remove blockquotes
+    .replace(/^>\s+/gm, '')
+    // Remove horizontal rules
+    .replace(/^[-*_]{3,}\s*$/gm, '')
+    // Remove list markers
+    .replace(/^[\s]*[-*+]\s+/gm, '')
+    .replace(/^[\s]*\d+\.\s+/gm, '')
+    // Clean up extra whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 export default function TaskCard({
   task,
   onClick,
@@ -32,7 +59,6 @@ export default function TaskCard({
   linksCount
 }: TaskCardProps) {
   const [isCreating, setIsCreating] = useState(false)
-  const [isHovered, setIsHovered] = useState(false)
   const router = useRouter()
   const supabaseRef = useRef<SupabaseClient | null>(null)
 
@@ -76,151 +102,155 @@ export default function TaskCard({
     }
   }
 
+  const needsEstimation = task.story_points === null || task.story_points === 0
+  const cleanDescription = task.description ? stripMarkdown(task.description) : null
+
   const cardContent = (isDragging: boolean = false) => (
-    <Card
+    <div
       onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        'group cursor-pointer overflow-hidden transition-all duration-200',
-        'border-moss-100 hover:border-moss-300',
-        'hover:shadow-lg',
-        isDragging && 'shadow-2xl rotate-2 scale-105 border-moss-400 bg-white',
-        !isDragging && 'hover:-translate-y-1',
+        // Base styles - clean, minimal
+        'group relative bg-white rounded-xl border cursor-pointer',
+        'transition-all duration-200 ease-out',
+
+        // Default state
+        'border-gray-100 shadow-sm',
+
+        // Hover state
+        'hover:shadow-md hover:border-gray-200 hover:-translate-y-0.5',
+
+        // Dragging state
+        isDragging && 'shadow-xl rotate-1 scale-[1.02] border-gray-300 ring-2 ring-gray-200/50',
+
+        // Drag enabled cursor
         isDragEnabled && 'cursor-grab active:cursor-grabbing'
       )}
     >
-      {/* Drag indicator - show when drag is enabled */}
+      {/* Drag Handle - subtle, appears on hover */}
       {isDragEnabled && (
         <div
           className={cn(
-            'absolute top-2 left-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity',
-            'bg-moss-100/50',
-            isDragging && 'opacity-100'
+            'absolute top-3 left-2 p-0.5 rounded transition-opacity',
+            'opacity-0 group-hover:opacity-60',
+            isDragging && 'opacity-80'
           )}
         >
-          <GripVertical className="w-4 h-4 text-moss-400" />
+          <GripVertical className="w-4 h-4 text-gray-400" />
         </div>
       )}
 
-      {/* Decorative corner blob */}
-      <div className={cn(
-        'absolute -top-6 -right-6 w-16 h-16 bg-moss-100 rounded-full transition-all duration-500',
-        isDragging ? 'opacity-70 scale-125' : 'opacity-50 group-hover:scale-150 group-hover:opacity-30'
-      )} />
+      {/* Card Content */}
+      <div className={cn('p-4', isDragEnabled && 'pl-7')}>
 
-      <CardHeader className={cn("relative pb-2", isDragEnabled ? "pl-8" : "")}>
-        <div className="flex items-start justify-between gap-3">
+        {/* Header: Title + Sloth indicator */}
+        <div className="flex items-start justify-between gap-3 mb-2">
           <h4 className={cn(
-            'font-display font-semibold text-lg text-sloth-800 transition-colors leading-tight',
-            !isDragging && 'group-hover:text-moss-700'
+            'font-medium text-gray-900 leading-snug',
+            'group-hover:text-gray-700 transition-colors'
           )}>
             {task.title}
           </h4>
 
-          {/* Sloth icon for tasks without story points */}
-          {task.story_points === null && (
-            <span
-              className={cn(
-                "text-2xl transition-all duration-300 flex-shrink-0",
-                (isHovered || isDragging) ? "animate-gentle-sway" : ""
-              )}
-            >
+          {/* Sloth indicator for unestimated tasks */}
+          {needsEstimation && (
+            <span className="text-xl flex-shrink-0" title="Sin estimar">
               🦥
             </span>
           )}
         </div>
 
-        {task.description && (
-          <p className="text-muted-foreground text-sm mt-2 line-clamp-2 leading-relaxed">
-            {task.description}
+        {/* Description Preview - cleaned markdown */}
+        {cleanDescription && (
+          <p className="text-gray-500 text-sm line-clamp-2 leading-relaxed mb-3">
+            {cleanDescription}
           </p>
         )}
-      </CardHeader>
 
-      <CardContent className={cn("pt-0 pb-3", isDragEnabled ? "pl-8" : "")}>
-        <div className="flex flex-wrap items-center gap-2">
-          {task.story_points !== null && (
-            <Badge
-              variant="secondary"
-              className="bg-moss-500 text-white hover:bg-moss-600 border-0 font-display font-bold px-3"
-            >
+        {/* Badges Row */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Story Points Badge - prominent green */}
+          {task.story_points !== null && task.story_points > 0 && (
+            <Badge className="bg-emerald-600 text-white hover:bg-emerald-700 border-0 text-xs font-semibold px-2 py-0.5">
               <Sparkles className="w-3 h-3 mr-1" />
               {task.story_points} SP
             </Badge>
           )}
 
+          {/* Document Badge - subtle outline */}
           {hasDocument && (
             <Badge
               variant="outline"
-              className="bg-earth-50 text-earth-700 border-earth-200"
+              className="bg-amber-50/80 text-amber-700 border-amber-200/80 text-xs px-2 py-0.5"
             >
               <FileText className="w-3 h-3 mr-1" />
               Doc
             </Badge>
           )}
 
+          {/* Links Badge - subtle outline */}
           {linksCount > 0 && (
             <Badge
               variant="outline"
-              className="bg-slate-50 text-slate-700 border-slate-200"
+              className="bg-slate-50 text-slate-600 border-slate-200 text-xs px-2 py-0.5"
             >
               <LinkIcon className="w-3 h-3 mr-1" />
               {linksCount}
             </Badge>
           )}
         </div>
-      </CardContent>
 
-      {/* PM Controls */}
-      {userRole === 'pm' && (
-        <CardFooter className={cn("pt-0 pb-4", isDragEnabled ? "pl-8" : "")}>
-          {task.story_points === null || task.story_points === 0 ? (
-            // Full button when no SP assigned
-            <Button
-              onClick={createVotingSession}
-              disabled={isCreating}
-              size="sm"
-              className={cn(
-                "w-full bg-moss-gradient hover:opacity-90 transition-opacity",
-                "text-white font-display font-semibold",
-                "btn-premium"
-              )}
-            >
-              {isCreating ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  <Users className="w-4 h-4 mr-2" />
-                  Planning Poker
-                </>
-              )}
-            </Button>
-          ) : (
-            // Compact button when SP already assigned
-            <Button
-              onClick={createVotingSession}
-              disabled={isCreating}
-              variant="outline"
-              size="sm"
-              className={cn(
-                "text-moss-600 border-moss-200 hover:bg-moss-50 hover:border-moss-300",
-                "font-display text-xs"
-              )}
-            >
-              {isCreating ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <>
-                  <Users className="w-3 h-3 mr-1" />
-                  Re-estimar
-                </>
-              )}
-            </Button>
-          )}
-        </CardFooter>
-      )}
-    </Card>
+        {/* PM Controls - Planning Poker buttons */}
+        {userRole === 'pm' && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            {needsEstimation ? (
+              // Ghost button for estimation - subtle, text-link style
+              <Button
+                onClick={createVotingSession}
+                disabled={isCreating}
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  'h-8 px-2 w-full justify-center',
+                  'text-gray-500 hover:text-gray-700 hover:bg-gray-50',
+                  'font-normal text-sm'
+                )}
+              >
+                {isCreating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <SquareStack className="w-4 h-4 mr-2" />
+                    Estimar (Planning Poker)
+                  </>
+                )}
+              </Button>
+            ) : (
+              // Filled secondary button for re-estimation
+              <Button
+                onClick={createVotingSession}
+                disabled={isCreating}
+                size="sm"
+                className={cn(
+                  'h-7 px-3',
+                  'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                  'border-0 shadow-none',
+                  'font-normal text-xs'
+                )}
+              >
+                {isCreating ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <>
+                    <SquareStack className="w-3 h-3 mr-1.5" />
+                    Re-estimar
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   )
 
   // Only render Draggable when drag is enabled (after client mount)
@@ -235,9 +265,7 @@ export default function TaskCard({
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          style={{
-            ...provided.draggableProps.style,
-          }}
+          style={provided.draggableProps.style}
         >
           {cardContent(snapshot.isDragging)}
         </div>
