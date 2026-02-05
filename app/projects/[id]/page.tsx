@@ -46,6 +46,45 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     console.error('Error fetching tasks:', tasksError)
   }
 
+  // Fetch user role (for PM features)
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  const userRole = profile?.role || null
+
+  // Fetch all task documents and links counts in one query each
+  const taskIds = (tasks || []).map(t => t.id)
+
+  let taskDocsMap: Record<string, boolean> = {}
+  let taskLinksMap: Record<string, number> = {}
+
+  if (taskIds.length > 0) {
+    // Get which tasks have documents
+    const { data: taskDocs } = await supabase
+      .from('task_documents')
+      .select('task_id')
+      .in('task_id', taskIds)
+
+    taskDocsMap = (taskDocs || []).reduce((acc, doc) => {
+      acc[doc.task_id] = true
+      return acc
+    }, {} as Record<string, boolean>)
+
+    // Get links count per task
+    const { data: taskLinks } = await supabase
+      .from('task_links')
+      .select('task_id')
+      .in('task_id', taskIds)
+
+    taskLinksMap = (taskLinks || []).reduce((acc, link) => {
+      acc[link.task_id] = (acc[link.task_id] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+  }
+
   return (
     <div className="min-h-screen bg-organic-gradient">
       {/* Header */}
@@ -102,7 +141,13 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           </TabsList>
 
           <TabsContent value="board" className="mt-6">
-            <KanbanBoard projectId={id} initialTasks={tasks || []} />
+            <KanbanBoard
+              projectId={id}
+              initialTasks={tasks || []}
+              userRole={userRole}
+              taskDocsMap={taskDocsMap}
+              taskLinksMap={taskLinksMap}
+            />
           </TabsContent>
 
           <TabsContent value="documents" className="mt-6">

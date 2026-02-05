@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Task, TaskStatus, TaskLink, LINK_TYPES, LinkType } from '@/lib/types'
-import { Trash2, FileText, Link as LinkIcon, Hash, Layers, Plus, ExternalLink, X } from 'lucide-react'
+import { Task, TaskStatus, TaskLink, TaskDocument, LINK_TYPES, LinkType } from '@/lib/types'
+import Link from 'next/link'
+import { Trash2, FileText, Link as LinkIcon, Hash, Layers, Plus, ExternalLink, X, Edit } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,7 @@ interface TaskModalProps {
   onSave: (task: Partial<Task>) => Promise<void>
   onDelete?: () => Promise<void>
   task?: Task | null
+  projectId?: string
 }
 
 export default function TaskModal({
@@ -43,6 +45,7 @@ export default function TaskModal({
   onSave,
   onDelete,
   task,
+  projectId,
 }: TaskModalProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -52,9 +55,12 @@ export default function TaskModal({
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
+  // Document state
+  const [taskDocument, setTaskDocument] = useState<TaskDocument | null>(null)
+
   // Links state
   const [links, setLinks] = useState<TaskLink[]>([])
-  const [loadingLinks, setLoadingLinks] = useState(false)
+  const [loadingData, setLoadingData] = useState(false)
   const [showAddLink, setShowAddLink] = useState(false)
   const [newLinkUrl, setNewLinkUrl] = useState('')
   const [newLinkTitle, setNewLinkTitle] = useState('')
@@ -75,35 +81,45 @@ export default function TaskModal({
       setDescription(task.description || '')
       setStoryPoints(task.story_points?.toString() || '')
       setStatus(task.status)
-      loadTaskLinks(task.id)
+      loadTaskData(task.id)
     } else {
       setTitle('')
       setDescription('')
       setStoryPoints('')
       setStatus('backlog')
       setLinks([])
+      setTaskDocument(null)
     }
     setShowDeleteConfirm(false)
     setShowAddLink(false)
   }, [task, isOpen])
 
-  const loadTaskLinks = async (taskId: string) => {
-    setLoadingLinks(true)
+  const loadTaskData = async (taskId: string) => {
+    setLoadingData(true)
     try {
       const supabase = getSupabase()
-      const { data, error } = await supabase
+
+      // Load task document
+      const { data: docData } = await supabase
+        .from('task_documents')
+        .select('*')
+        .eq('task_id', taskId)
+        .maybeSingle()
+
+      setTaskDocument(docData)
+
+      // Load links
+      const { data: linksData } = await supabase
         .from('task_links')
         .select('*')
         .eq('task_id', taskId)
         .order('created_at', { ascending: false })
 
-      if (!error && data) {
-        setLinks(data)
-      }
+      setLinks(linksData || [])
     } catch (error) {
-      console.error('Error loading links:', error)
+      console.error('Error loading task data:', error)
     } finally {
-      setLoadingLinks(false)
+      setLoadingData(false)
     }
   }
 
@@ -290,10 +306,47 @@ export default function TaskModal({
             </div>
           </div>
 
-          {/* Links Section - Only shown when editing */}
-          {task && (
+          {/* Document & Links Section - Only shown when editing */}
+          {task && projectId && (
             <>
               <Separator />
+
+              {/* Task Document */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  Documento detallado
+                </Label>
+                {loadingData ? (
+                  <p className="text-sm text-muted-foreground">Cargando...</p>
+                ) : taskDocument ? (
+                  <div className="flex items-center gap-2 p-2 bg-moss-50 rounded-lg border border-moss-100">
+                    <span className="text-sm">📄</span>
+                    <span className="flex-1 text-sm font-medium truncate">{taskDocument.title}</span>
+                    <Link href={`/projects/${projectId}/tasks/${task.id}/document`} onClick={onClose}>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs">
+                        Ver
+                      </Button>
+                    </Link>
+                    <Link href={`/projects/${projectId}/tasks/${task.id}/document/edit`} onClick={onClose}>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0">
+                        <Edit className="w-3 h-3" />
+                      </Button>
+                    </Link>
+                  </div>
+                ) : (
+                  <Link href={`/projects/${projectId}/tasks/${task.id}/document/new`} onClick={onClose}>
+                    <Button type="button" variant="outline" size="sm" className="w-full text-xs">
+                      <Plus className="w-3 h-3 mr-1" />
+                      Crear documento detallado
+                    </Button>
+                  </Link>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Links */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-2">
@@ -370,7 +423,7 @@ export default function TaskModal({
                 )}
 
                 {/* Links list */}
-                {loadingLinks ? (
+                {loadingData ? (
                   <div className="text-center py-2 text-sm text-muted-foreground">
                     Cargando enlaces...
                   </div>

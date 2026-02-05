@@ -15,6 +15,9 @@ interface KanbanColumnProps {
   onTaskClick: (task: Task) => void
   onAddTask: (status: TaskStatus) => void
   isDragEnabled?: boolean
+  userRole: string | null
+  taskDocsMap: Record<string, boolean>
+  taskLinksMap: Record<string, number>
 }
 
 const statusConfig: Record<TaskStatus, {
@@ -62,6 +65,9 @@ export default function KanbanColumn({
   onTaskClick,
   onAddTask,
   isDragEnabled = false,
+  userRole,
+  taskDocsMap,
+  taskLinksMap,
 }: KanbanColumnProps) {
   const config = statusConfig[status]
   const filteredTasks = tasks.filter((task) => task.status === status)
@@ -76,6 +82,9 @@ export default function KanbanColumn({
           onClick={() => onTaskClick(task)}
           index={index}
           isDragEnabled={isDragEnabled}
+          userRole={userRole}
+          hasDocument={taskDocsMap[task.id] || false}
+          linksCount={taskLinksMap[task.id] || 0}
         />
       ))}
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Draggable } from '@hello-pangea/dnd'
 import { Task } from '@/lib/types'
@@ -17,14 +17,22 @@ interface TaskCardProps {
   onClick: () => void
   index: number
   isDragEnabled?: boolean
+  userRole: string | null
+  hasDocument: boolean
+  linksCount: number
 }
 
-export default function TaskCard({ task, onClick, index, isDragEnabled = false }: TaskCardProps) {
-  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+export default function TaskCard({
+  task,
+  onClick,
+  index,
+  isDragEnabled = false,
+  userRole,
+  hasDocument,
+  linksCount
+}: TaskCardProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
-  const [hasDocument, setHasDocument] = useState(false)
-  const [linksCount, setLinksCount] = useState(0)
   const router = useRouter()
   const supabaseRef = useRef<SupabaseClient | null>(null)
 
@@ -34,48 +42,6 @@ export default function TaskCard({ task, onClick, index, isDragEnabled = false }
     }
     return supabaseRef.current
   }
-
-  useEffect(() => {
-    async function loadUserRole() {
-      const supabase = getSupabase()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
-
-        setCurrentUserRole(data?.role || null)
-      }
-    }
-    loadUserRole()
-  }, [])
-
-  // Load task document and links count
-  useEffect(() => {
-    async function loadTaskDetails() {
-      const supabase = getSupabase()
-
-      // Check if task has a document
-      const { data: taskDoc } = await supabase
-        .from('task_documents')
-        .select('id')
-        .eq('task_id', task.id)
-        .maybeSingle()
-
-      setHasDocument(!!taskDoc)
-
-      // Get links count
-      const { count } = await supabase
-        .from('task_links')
-        .select('*', { count: 'exact', head: true })
-        .eq('task_id', task.id)
-
-      setLinksCount(count || 0)
-    }
-    loadTaskDetails()
-  }, [task.id])
 
   const createVotingSession = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -207,7 +173,7 @@ export default function TaskCard({ task, onClick, index, isDragEnabled = false }
       </CardContent>
 
       {/* PM Controls */}
-      {currentUserRole === 'pm' && (
+      {userRole === 'pm' && (
         <CardFooter className={cn("pt-0 pb-4", isDragEnabled ? "pl-8" : "")}>
           <Button
             onClick={createVotingSession}
