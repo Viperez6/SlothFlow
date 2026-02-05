@@ -202,51 +202,28 @@ export default function TaskCard({
         {/* PM Controls - Planning Poker buttons */}
         {userRole === 'pm' && (
           <div className="mt-3 pt-3 border-t border-gray-100">
-            {needsEstimation ? (
-              // Ghost button for estimation - subtle, text-link style
-              <Button
-                onClick={createVotingSession}
-                disabled={isCreating}
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  'h-8 px-2 w-full justify-center',
-                  'text-gray-500 hover:text-gray-700 hover:bg-gray-50',
-                  'font-normal text-sm'
-                )}
-              >
-                {isCreating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <SquareStack className="w-4 h-4 mr-2" />
-                    Estimar (Planning Poker)
-                  </>
-                )}
-              </Button>
-            ) : (
-              // Filled secondary button for re-estimation
-              <Button
-                onClick={createVotingSession}
-                disabled={isCreating}
-                size="sm"
-                className={cn(
-                  'h-7 px-3',
-                  'bg-gray-100 text-gray-700 hover:bg-gray-200',
-                  'border-0 shadow-none',
-                  'font-normal text-xs'
-                )}
-              >
-                {isCreating ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <>
-                    <SquareStack className="w-3 h-3 mr-1.5" />
-                    Re-estimar
-                  </>
-                )}
-              </Button>
-            )}
+            <Button
+              onClick={createVotingSession}
+              disabled={isCreating}
+              variant="ghost"
+              size="sm"
+              className={cn(
+                'h-8 w-full relative',
+                'text-gray-500 hover:text-gray-700 hover:bg-gray-50',
+                'font-normal text-sm'
+              )}
+            >
+              {isCreating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <SquareStack className="w-4 h-4 absolute left-3" />
+                  <span className="w-full text-center">
+                    {needsEstimation ? 'Estimar' : 'Re-estimar'}
+                  </span>
+                </>
+              )}
+            </Button>
           </div>
         )}
       </div>
