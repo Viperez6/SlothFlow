@@ -175,25 +175,49 @@ export default function TaskCard({
       {/* PM Controls */}
       {userRole === 'pm' && (
         <CardFooter className={cn("pt-0 pb-4", isDragEnabled ? "pl-8" : "")}>
-          <Button
-            onClick={createVotingSession}
-            disabled={isCreating}
-            size="sm"
-            className={cn(
-              "w-full bg-moss-gradient hover:opacity-90 transition-opacity",
-              "text-white font-display font-semibold",
-              "btn-premium"
-            )}
-          >
-            {isCreating ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <>
-                <Users className="w-4 h-4 mr-2" />
-                Planning Poker
-              </>
-            )}
-          </Button>
+          {task.story_points === null || task.story_points === 0 ? (
+            // Full button when no SP assigned
+            <Button
+              onClick={createVotingSession}
+              disabled={isCreating}
+              size="sm"
+              className={cn(
+                "w-full bg-moss-gradient hover:opacity-90 transition-opacity",
+                "text-white font-display font-semibold",
+                "btn-premium"
+              )}
+            >
+              {isCreating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <Users className="w-4 h-4 mr-2" />
+                  Planning Poker
+                </>
+              )}
+            </Button>
+          ) : (
+            // Compact button when SP already assigned
+            <Button
+              onClick={createVotingSession}
+              disabled={isCreating}
+              variant="outline"
+              size="sm"
+              className={cn(
+                "text-moss-600 border-moss-200 hover:bg-moss-50 hover:border-moss-300",
+                "font-display text-xs"
+              )}
+            >
+              {isCreating ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <>
+                  <Users className="w-3 h-3 mr-1" />
+                  Re-estimar
+                </>
+              )}
+            </Button>
+          )}
         </CardFooter>
       )}
     </Card>
