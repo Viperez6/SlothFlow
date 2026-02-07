@@ -6,9 +6,19 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { VotingSession, Vote, Task, Profile, GuestVoter, SLOTH_AVATARS, SlothAvatarId } from '@/lib/types'
 import { SlothAvatarDisplay } from '@/components/SlothAvatarSelector'
-import { ArrowLeft, Eye, EyeOff, Users, Sparkles, CheckCircle2, Trophy, Share2, Copy } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Users, Sparkles, CheckCircle2, Trophy, Share2, Copy, RefreshCw, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
@@ -42,6 +52,8 @@ export default function VotingPage() {
   const [revealing, setRevealing] = useState(false)
   const [assigning, setAssigning] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
+  const [pendingPoints, setPendingPoints] = useState<number | null>(null)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const router = useRouter()
   const supabaseRef = useRef<SupabaseClient | null>(null)
 
@@ -227,25 +239,49 @@ export default function VotingPage() {
   }
 
   const handleVote = async (points: number) => {
-    if (voting || myVote !== null || !currentVoter) return
+    if (voting || !currentVoter || isRevealed) return
+
+    // Don't re-vote the same value
+    if (myVote === points) return
 
     setVoting(true)
+    const isChangingVote = myVote !== null
+
     try {
       const supabase = getSupabase()
 
-      const voteData = currentVoter.type === 'user'
-        ? { session_id: sessionId, user_id: currentVoter.id, story_points: points }
-        : { session_id: sessionId, guest_id: currentVoter.id, story_points: points }
+      if (isChangingVote) {
+        // Update existing vote
+        const updateFilter = currentVoter.type === 'user'
+          ? { session_id: sessionId, user_id: currentVoter.id }
+          : { session_id: sessionId, guest_id: currentVoter.id }
 
-      const { error } = await supabase
-        .from('votes')
-        .insert(voteData)
+        const { error } = await supabase
+          .from('votes')
+          .update({ story_points: points })
+          .match(updateFilter)
 
-      if (error) throw error
-      setMyVote(points)
-      toast.success('Voto registrado', {
-        description: `Has votado ${points} story points`,
-      })
+        if (error) throw error
+        setMyVote(points)
+        toast.success('Voto actualizado', {
+          description: `Has cambiado tu voto a ${points} story points`,
+        })
+      } else {
+        // Insert new vote
+        const voteData = currentVoter.type === 'user'
+          ? { session_id: sessionId, user_id: currentVoter.id, story_points: points }
+          : { session_id: sessionId, guest_id: currentVoter.id, story_points: points }
+
+        const { error } = await supabase
+          .from('votes')
+          .insert(voteData)
+
+        if (error) throw error
+        setMyVote(points)
+        toast.success('Voto registrado', {
+          description: `Has votado ${points} story points`,
+        })
+      }
     } catch (error) {
       console.error('Error voting:', error)
       toast.error('Error al votar')
@@ -278,22 +314,28 @@ export default function VotingPage() {
     }
   }
 
-  const handleAssignPoints = async (points: number) => {
-    if (assigning || !session) return
+  const handleRequestAssignPoints = (points: number) => {
+    setPendingPoints(points)
+    setShowConfirmDialog(true)
+  }
 
+  const handleConfirmAssignPoints = async () => {
+    if (assigning || !session || pendingPoints === null) return
+
+    setShowConfirmDialog(false)
     setAssigning(true)
     try {
       const supabase = getSupabase()
       const { error } = await supabase
         .from('tasks')
-        .update({ story_points: points })
+        .update({ story_points: pendingPoints })
         .eq('id', session.task_id)
 
       if (error) throw error
 
       setShowConfetti(true)
       toast.success('Story Points asignados', {
-        description: `La tarea ahora tiene ${points} SP`,
+        description: `La tarea ahora tiene ${pendingPoints} SP`,
       })
 
       setTimeout(() => {
@@ -304,7 +346,13 @@ export default function VotingPage() {
       toast.error('Error al asignar puntos')
     } finally {
       setAssigning(false)
+      setPendingPoints(null)
     }
+  }
+
+  const handleCancelAssign = () => {
+    setShowConfirmDialog(false)
+    setPendingPoints(null)
   }
 
   const copyShareLink = () => {
@@ -439,7 +487,15 @@ export default function VotingPage() {
         {/* Voting Cards */}
         <section className="mb-8">
           <h2 className="text-lg font-display font-semibold text-sloth-700 mb-4 flex items-center gap-2">
-            {hasVoted ? (
+            {hasVoted && !isRevealed ? (
+              <>
+                <CheckCircle2 className="w-5 h-5 text-moss-500" />
+                Tu voto ha sido registrado
+                <span className="text-sm font-normal text-muted-foreground ml-2">
+                  (puedes cambiar tu voto)
+                </span>
+              </>
+            ) : hasVoted && isRevealed ? (
               <>
                 <CheckCircle2 className="w-5 h-5 text-moss-500" />
                 Tu voto ha sido registrado
@@ -457,14 +513,14 @@ export default function VotingPage() {
               <button
                 key={num}
                 onClick={() => handleVote(num)}
-                disabled={hasVoted || voting || isRevealed}
+                disabled={voting || isRevealed || myVote === num}
                 className={cn(
                   'voting-card aspect-[3/4] flex items-center justify-center',
                   'text-2xl md:text-3xl font-display font-bold',
                   'animate-fade-in opacity-0',
                   myVote === num && 'selected',
-                  (hasVoted && myVote !== num) && 'opacity-40',
-                  isRevealed && 'opacity-50 cursor-not-allowed'
+                  isRevealed && 'opacity-50 cursor-not-allowed',
+                  hasVoted && !isRevealed && myVote !== num && 'hover:opacity-80'
                 )}
                 style={{
                   animationDelay: `${index * 0.05}s`,
@@ -486,10 +542,16 @@ export default function VotingPage() {
         {hasVoted && !isRevealed && !isPM && (
           <Card className="mb-8 border-amber-200 bg-amber-50/50 animate-fade-in">
             <CardContent className="py-4">
-              <p className="text-amber-700 flex items-center gap-2">
-                <span className="text-xl animate-gentle-sway">🦥</span>
-                Esperando a que el PM revele los votos...
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-amber-700 flex items-center gap-2">
+                  <span className="text-xl animate-gentle-sway">🦥</span>
+                  Esperando a que el PM revele los votos...
+                </p>
+                <p className="text-sm text-amber-600 flex items-center gap-1">
+                  <RefreshCw className="w-4 h-4" />
+                  Puedes cambiar tu voto arriba
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -623,7 +685,7 @@ export default function VotingPage() {
                       return (
                         <button
                           key={num}
-                          onClick={() => handleAssignPoints(num)}
+                          onClick={() => handleRequestAssignPoints(num)}
                           disabled={assigning}
                           className={cn(
                             'relative aspect-square rounded-xl border-2 border-moss-200',
@@ -655,6 +717,37 @@ export default function VotingPage() {
           </section>
         )}
       </main>
+
+      {/* PM Confirmation Dialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 font-display">
+              <AlertCircle className="w-5 h-5 text-amber-500" />
+              Confirmar Story Points
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-base">
+              ¿Estás seguro de asignar <strong className="text-moss-600">{pendingPoints} story points</strong> a esta tarea?
+              {task && (
+                <span className="block mt-2 text-sm text-muted-foreground">
+                  Tarea: {task.title}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelAssign}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmAssignPoints}
+              className="bg-moss-gradient hover:opacity-90"
+            >
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* CSS for confetti */}
       <style jsx>{`
