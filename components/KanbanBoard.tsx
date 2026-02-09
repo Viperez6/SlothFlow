@@ -2,37 +2,60 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { DragDropContext, DropResult } from '@hello-pangea/dnd'
-import { Task, TaskStatus } from '@/lib/types'
-import KanbanColumn from './KanbanColumn'
-import TaskModal from './TaskModal'
+import { UserStory, Subtask, SubtaskStatus, AcceptanceCriterion, Profile } from '@/lib/types'
+import UserStorySection from './UserStorySection'
+import UserStoryModal from './UserStoryModal'
+import SubtaskModal from './SubtaskModal'
 import { createClient } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { Separator } from '@/components/ui/separator'
+import { Button } from '@/components/ui/button'
+import { Plus, BookOpen } from 'lucide-react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 interface KanbanBoardProps {
   projectId: string
-  initialTasks: Task[]
+  initialUserStories: UserStory[]
+  initialSubtasks: Subtask[]
+  initialAcceptanceCriteria: AcceptanceCriterion[]
   userRole: string | null
-  taskDocsMap: Record<string, boolean>
-  taskLinksMap: Record<string, number>
+  userStoryDocsMap: Record<string, boolean>
+  userStoryLinksMap: Record<string, number>
+  teamMembers: Profile[]
 }
 
 export default function KanbanBoard({
   projectId,
-  initialTasks,
+  initialUserStories,
+  initialSubtasks,
+  initialAcceptanceCriteria,
   userRole,
-  taskDocsMap,
-  taskLinksMap
+  userStoryDocsMap,
+  userStoryLinksMap,
+  teamMembers,
 }: KanbanBoardProps) {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
-  const [defaultStatus, setDefaultStatus] = useState<TaskStatus>('backlog')
+  const [userStories, setUserStories] = useState<UserStory[]>(initialUserStories)
+  const [subtasks, setSubtasks] = useState<Subtask[]>(initialSubtasks)
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState<AcceptanceCriterion[]>(initialAcceptanceCriteria)
+
+  // Expand state: which stories are expanded
+  const [expandedStories, setExpandedStories] = useState<Set<string>>(
+    new Set(initialUserStories.map(s => s.id))
+  )
+
+  // User Story Modal
+  const [isStoryModalOpen, setIsStoryModalOpen] = useState(false)
+  const [selectedStory, setSelectedStory] = useState<UserStory | null>(null)
+
+  // Subtask Modal
+  const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false)
+  const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null)
+  const [subtaskParentStoryId, setSubtaskParentStoryId] = useState<string>('')
+  const [subtaskDefaultStatus, setSubtaskDefaultStatus] = useState<SubtaskStatus>('backlog')
+
   const [isMounted, setIsMounted] = useState(false)
   const supabaseRef = useRef<SupabaseClient | null>(null)
 
-  // Fix hydration mismatch - only render drag and drop on client
   useEffect(() => {
     setIsMounted(true)
   }, [])
@@ -44,214 +67,322 @@ export default function KanbanBoard({
     return supabaseRef.current
   }
 
-  // Open modal to edit task on click
-  const handleTaskClick = (task: Task) => {
-    setSelectedTask(task)
-    setIsModalOpen(true)
+  // Toggle expand/collapse
+  const toggleExpand = (storyId: string) => {
+    setExpandedStories(prev => {
+      const next = new Set(prev)
+      if (next.has(storyId)) {
+        next.delete(storyId)
+      } else {
+        next.add(storyId)
+      }
+      return next
+    })
   }
 
-  const handleAddTask = (status: TaskStatus) => {
-    setSelectedTask(null)
-    setDefaultStatus(status)
-    setIsModalOpen(true)
+  // --- User Story CRUD ---
+
+  const handleAddStory = () => {
+    setSelectedStory(null)
+    setIsStoryModalOpen(true)
   }
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false)
-    setSelectedTask(null)
+  const handleEditStory = (story: UserStory) => {
+    setSelectedStory(story)
+    setIsStoryModalOpen(true)
   }
+
+  const handleSaveStory = async (
+    storyData: Partial<UserStory>,
+    criteriaData: { description: string; is_completed: boolean }[]
+  ) => {
+    const supabase = getSupabase()
+
+    if (selectedStory) {
+      // Update existing story
+      const { data, error } = await supabase
+        .from('user_stories')
+        .update({
+          title: storyData.title,
+          description: storyData.description,
+          priority: storyData.priority,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedStory.id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setUserStories(prev => prev.map(s => s.id === selectedStory.id ? data : s))
+
+      // Update acceptance criteria: delete all and re-insert
+      await supabase
+        .from('acceptance_criteria')
+        .delete()
+        .eq('user_story_id', selectedStory.id)
+
+      if (criteriaData.length > 0) {
+        const { data: newCriteria } = await supabase
+          .from('acceptance_criteria')
+          .insert(criteriaData.map((c, i) => ({
+            user_story_id: selectedStory.id,
+            description: c.description,
+            is_completed: c.is_completed,
+            sort_order: i,
+          })))
+          .select()
+
+        setAcceptanceCriteria(prev => [
+          ...prev.filter(c => c.user_story_id !== selectedStory.id),
+          ...(newCriteria || []),
+        ])
+      } else {
+        setAcceptanceCriteria(prev => prev.filter(c => c.user_story_id !== selectedStory.id))
+      }
+
+      toast.success('Historia actualizada')
+    } else {
+      // Create new story
+      const { data, error } = await supabase
+        .from('user_stories')
+        .insert({
+          project_id: projectId,
+          title: storyData.title,
+          description: storyData.description,
+          priority: storyData.priority || 'medium',
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setUserStories(prev => [...prev, data])
+      setExpandedStories(prev => {
+        const next = new Set(prev)
+        next.add(data.id)
+        return next
+      })
+
+      // Insert acceptance criteria
+      if (criteriaData.length > 0) {
+        const { data: newCriteria } = await supabase
+          .from('acceptance_criteria')
+          .insert(criteriaData.map((c, i) => ({
+            user_story_id: data.id,
+            description: c.description,
+            is_completed: c.is_completed,
+            sort_order: i,
+          })))
+          .select()
+
+        if (newCriteria) {
+          setAcceptanceCriteria(prev => [...prev, ...newCriteria])
+        }
+      }
+
+      toast.success('Historia creada')
+    }
+  }
+
+  const handleDeleteStory = async () => {
+    if (!selectedStory) return
+
+    const supabase = getSupabase()
+    const { error } = await supabase
+      .from('user_stories')
+      .delete()
+      .eq('id', selectedStory.id)
+
+    if (error) throw error
+
+    setUserStories(prev => prev.filter(s => s.id !== selectedStory.id))
+    setSubtasks(prev => prev.filter(st => st.user_story_id !== selectedStory.id))
+    setAcceptanceCriteria(prev => prev.filter(c => c.user_story_id !== selectedStory.id))
+    toast.success('Historia eliminada')
+  }
+
+  // --- Subtask CRUD ---
+
+  const handleSubtaskClick = (subtask: Subtask) => {
+    setSelectedSubtask(subtask)
+    setSubtaskParentStoryId(subtask.user_story_id)
+    setIsSubtaskModalOpen(true)
+  }
+
+  const handleAddSubtask = (userStoryId: string, status: SubtaskStatus) => {
+    setSelectedSubtask(null)
+    setSubtaskParentStoryId(userStoryId)
+    setSubtaskDefaultStatus(status)
+    setIsSubtaskModalOpen(true)
+  }
+
+  const handleSaveSubtask = async (subtaskData: Partial<Subtask>) => {
+    const supabase = getSupabase()
+
+    if (selectedSubtask) {
+      // Update
+      const { data, error } = await supabase
+        .from('subtasks')
+        .update({
+          title: subtaskData.title,
+          description: subtaskData.description,
+          status: subtaskData.status,
+          type: subtaskData.type,
+          assigned_to: subtaskData.assigned_to,
+          story_points: subtaskData.story_points,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedSubtask.id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setSubtasks(prev => prev.map(st => st.id === selectedSubtask.id ? data : st))
+      toast.success('Subtarea actualizada')
+    } else {
+      // Create
+      const { data, error } = await supabase
+        .from('subtasks')
+        .insert({
+          user_story_id: subtaskParentStoryId,
+          title: subtaskData.title,
+          description: subtaskData.description,
+          status: subtaskData.status || subtaskDefaultStatus,
+          type: subtaskData.type || 'other',
+          assigned_to: subtaskData.assigned_to,
+          story_points: subtaskData.story_points,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setSubtasks(prev => [...prev, data])
+      toast.success('Subtarea creada')
+    }
+  }
+
+  const handleDeleteSubtask = async () => {
+    if (!selectedSubtask) return
+
+    const supabase = getSupabase()
+    const { error } = await supabase
+      .from('subtasks')
+      .delete()
+      .eq('id', selectedSubtask.id)
+
+    if (error) throw error
+
+    setSubtasks(prev => prev.filter(st => st.id !== selectedSubtask.id))
+    toast.success('Subtarea eliminada')
+  }
+
+  // --- Drag & Drop ---
 
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result
 
-    // Dropped outside a droppable area
     if (!destination) return
 
-    // Dropped in the same position
-    if (
-      destination.droppableId === source.droppableId &&
-      destination.index === source.index
-    ) {
+    // Parse droppable IDs: "userStoryId:status"
+    const [sourceStoryId, sourceStatus] = source.droppableId.split(':')
+    const [destStoryId, destStatus] = destination.droppableId.split(':')
+
+    // Enforce same-HU constraint
+    if (sourceStoryId !== destStoryId) {
+      toast.error('No puedes mover subtareas entre historias')
       return
     }
 
-    const newStatus = destination.droppableId as TaskStatus
-    const taskId = draggableId
+    if (sourceStatus === destStatus && source.index === destination.index) return
 
-    // Optimistically update the UI
-    setTasks((prevTasks) =>
-      prevTasks.map((task) =>
-        task.id === taskId ? { ...task, status: newStatus } : task
-      )
-    )
+    const subtaskId = draggableId
+    const newStatus = destStatus as SubtaskStatus
 
-    // Update in database
+    // Optimistic update
+    setSubtasks(prev => prev.map(st =>
+      st.id === subtaskId ? { ...st, status: newStatus } : st
+    ))
+
     try {
       const supabase = getSupabase()
       const { error } = await supabase
-        .from('tasks')
+        .from('subtasks')
         .update({
           status: newStatus,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', taskId)
+        .eq('id', subtaskId)
 
       if (error) throw error
 
-      // Show success feedback based on new status
-      const statusMessages: Record<TaskStatus, string> = {
-        backlog: 'Tarea movida a Backlog',
-        in_progress: 'Tarea en progreso',
-        done: '¡Tarea completada!',
+      const statusMessages: Record<SubtaskStatus, string> = {
+        backlog: 'Subtarea movida a Backlog',
+        in_progress: 'Subtarea en progreso',
+        done: 'Subtarea completada!',
       }
 
       toast.success(statusMessages[newStatus], {
-        description: newStatus === 'done' ? '¡Buen trabajo! 🦥' : undefined,
+        description: newStatus === 'done' ? 'Buen trabajo! 🦥' : undefined,
       })
     } catch (error) {
-      // Revert on error
-      setTasks((prevTasks) =>
-        prevTasks.map((task) =>
-          task.id === taskId ? { ...task, status: source.droppableId as TaskStatus } : task
-        )
-      )
-      toast.error('Error al mover tarea', {
-        description: 'No se pudo actualizar el estado. Intenta de nuevo.',
-      })
+      // Revert
+      setSubtasks(prev => prev.map(st =>
+        st.id === subtaskId ? { ...st, status: sourceStatus as SubtaskStatus } : st
+      ))
+      toast.error('Error al mover subtarea')
       console.error(error)
     }
   }
 
-  const handleSaveTask = async (taskData: Partial<Task>) => {
-    const supabase = getSupabase()
+  // --- Stats ---
 
-    if (selectedTask) {
-      // Update existing task
-      try {
-        const { data, error } = await supabase
-          .from('tasks')
-          .update({
-            title: taskData.title,
-            description: taskData.description,
-            story_points: taskData.story_points,
-            status: taskData.status,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', selectedTask.id)
-          .select()
-          .single()
+  const totalStories = userStories.length
+  const totalSubtasksCount = subtasks.length
+  const doneSubtasks = subtasks.filter(st => st.status === 'done').length
+  const totalSP = subtasks.reduce((sum, st) => sum + (st.story_points || 0), 0)
+  const doneSP = subtasks.filter(st => st.status === 'done').reduce((sum, st) => sum + (st.story_points || 0), 0)
 
-        if (error) throw error
-
-        setTasks(tasks.map(t => t.id === selectedTask.id ? data : t))
-        toast.success('Tarea actualizada')
-      } catch (error) {
-        toast.error('Error al actualizar', {
-          description: 'No se pudo actualizar la tarea.',
-        })
-        console.error(error)
-        throw error
-      }
-    } else {
-      // Create new task
-      try {
-        const { data, error } = await supabase
-          .from('tasks')
-          .insert({
-            project_id: projectId,
-            title: taskData.title,
-            description: taskData.description,
-            story_points: taskData.story_points,
-            status: taskData.status || defaultStatus,
-          })
-          .select()
-          .single()
-
-        if (error) throw error
-
-        setTasks([...tasks, data])
-        toast.success('Tarea creada', {
-          description: 'La nueva tarea ha sido agregada al tablero.',
-        })
-      } catch (error) {
-        toast.error('Error al guardar', {
-          description: 'No se pudo guardar la tarea.',
-        })
-        console.error(error)
-        throw error
-      }
-    }
-  }
-
-  const handleDeleteTask = async () => {
-    if (!selectedTask) return
-
-    try {
-      const supabase = getSupabase()
-
-      // Delete related task_links
-      await supabase.from('task_links').delete().eq('task_id', selectedTask.id)
-      // Delete related task_documents
-      await supabase.from('task_documents').delete().eq('task_id', selectedTask.id)
-      // Delete task
-      const { error } = await supabase.from('tasks').delete().eq('id', selectedTask.id)
-
-      if (error) throw error
-
-      setTasks(tasks.filter(t => t.id !== selectedTask.id))
-      toast.success('Tarea eliminada')
-    } catch (error) {
-      toast.error('Error al eliminar', {
-        description: 'No se pudo eliminar la tarea.',
-      })
-      console.error(error)
-      throw error
-    }
-  }
-
-  // Calculate stats
-  const totalTasks = tasks.length
-  const completedTasks = tasks.filter(t => t.status === 'done').length
-  const totalPoints = tasks.reduce((sum, t) => sum + (t.story_points || 0), 0)
-  const completedPoints = tasks
-    .filter(t => t.status === 'done')
-    .reduce((sum, t) => sum + (t.story_points || 0), 0)
-
-  const columnsContent = (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <KanbanColumn
-        title="Backlog"
-        status="backlog"
-        tasks={tasks}
-        onTaskClick={handleTaskClick}
-        onAddTask={handleAddTask}
-        isDragEnabled={isMounted}
-        userRole={userRole}
-        taskDocsMap={taskDocsMap}
-        taskLinksMap={taskLinksMap}
-      />
-      <KanbanColumn
-        title="En Progreso"
-        status="in_progress"
-        tasks={tasks}
-        onTaskClick={handleTaskClick}
-        onAddTask={handleAddTask}
-        isDragEnabled={isMounted}
-        userRole={userRole}
-        taskDocsMap={taskDocsMap}
-        taskLinksMap={taskLinksMap}
-      />
-      <KanbanColumn
-        title="Completado"
-        status="done"
-        tasks={tasks}
-        onTaskClick={handleTaskClick}
-        onAddTask={handleAddTask}
-        isDragEnabled={isMounted}
-        userRole={userRole}
-        taskDocsMap={taskDocsMap}
-        taskLinksMap={taskLinksMap}
-      />
+  const boardContent = (
+    <div className="space-y-4">
+      {userStories.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <span className="text-5xl mb-4">🦥</span>
+          <h3 className="font-display font-semibold text-xl text-sloth-800 mb-2">
+            Sin historias de usuario
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            Crea tu primera historia de usuario para empezar
+          </p>
+          <Button
+            onClick={handleAddStory}
+            className="bg-moss-gradient hover:opacity-90 text-white font-display font-semibold btn-premium"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva Historia de Usuario
+          </Button>
+        </div>
+      ) : (
+        userStories.map(story => (
+          <UserStorySection
+            key={story.id}
+            userStory={story}
+            subtasks={subtasks.filter(st => st.user_story_id === story.id)}
+            acceptanceCriteria={acceptanceCriteria.filter(c => c.user_story_id === story.id)}
+            projectId={projectId}
+            userRole={userRole}
+            isExpanded={expandedStories.has(story.id)}
+            onToggleExpand={() => toggleExpand(story.id)}
+            onSubtaskClick={handleSubtaskClick}
+            onAddSubtask={handleAddSubtask}
+            onEditUserStory={handleEditStory}
+            isDragEnabled={isMounted}
+            teamMembers={teamMembers}
+          />
+        ))
+      )}
     </div>
   )
 
@@ -264,10 +395,10 @@ export default function KanbanBoard({
             <div className="flex items-center gap-2">
               <span className="text-3xl">🦥</span>
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Progreso</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Historias</p>
                 <p className="font-display font-bold text-xl text-sloth-800">
-                  {completedTasks}/{totalTasks}
-                  <span className="text-sm font-normal text-muted-foreground ml-1">tareas</span>
+                  {totalStories}
+                  <span className="text-sm font-normal text-muted-foreground ml-1">HUs</span>
                 </p>
               </div>
             </div>
@@ -275,54 +406,84 @@ export default function KanbanBoard({
             <Separator orientation="vertical" className="h-10" />
 
             <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Subtareas</p>
+              <p className="font-display font-bold text-xl text-sloth-800">
+                {doneSubtasks}/{totalSubtasksCount}
+              </p>
+            </div>
+
+            <Separator orientation="vertical" className="h-10" />
+
+            <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wider">Story Points</p>
               <p className="font-display font-bold text-xl text-moss-600">
-                {completedPoints}/{totalPoints}
+                {doneSP}/{totalSP}
                 <span className="text-sm font-normal text-muted-foreground ml-1">SP</span>
               </p>
             </div>
 
-            {totalPoints > 0 && (
+            {totalSP > 0 && (
               <>
                 <Separator orientation="vertical" className="h-10" />
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wider">Velocidad</p>
                   <p className="font-display font-bold text-xl text-earth-600">
-                    {Math.round((completedPoints / totalPoints) * 100)}%
+                    {Math.round((doneSP / totalSP) * 100)}%
                   </p>
                 </div>
               </>
             )}
           </div>
 
-          {/* Progress bar */}
-          <div className="w-48 hidden md:block">
-            <div className="h-2 bg-moss-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-moss-gradient rounded-full transition-all duration-500 ease-out"
-                style={{ width: totalTasks > 0 ? `${(completedTasks / totalTasks) * 100}%` : '0%' }}
-              />
+          {/* Add Story Button + Progress bar */}
+          <div className="flex items-center gap-4">
+            <div className="w-48 hidden md:block">
+              <div className="h-2 bg-moss-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-moss-gradient rounded-full transition-all duration-500 ease-out"
+                  style={{ width: totalSubtasksCount > 0 ? `${(doneSubtasks / totalSubtasksCount) * 100}%` : '0%' }}
+                />
+              </div>
             </div>
+            <Button
+              onClick={handleAddStory}
+              className="bg-moss-gradient hover:opacity-90 text-white font-display font-semibold btn-premium"
+              size="sm"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Nueva HU
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* Kanban Columns with Drag and Drop */}
+      {/* Board with Drag and Drop */}
       {isMounted ? (
         <DragDropContext onDragEnd={handleDragEnd}>
-          {columnsContent}
+          {boardContent}
         </DragDropContext>
       ) : (
-        columnsContent
+        boardContent
       )}
 
-      <TaskModal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        onSave={handleSaveTask}
-        onDelete={selectedTask ? handleDeleteTask : undefined}
-        task={selectedTask}
+      {/* Modals */}
+      <UserStoryModal
+        isOpen={isStoryModalOpen}
+        onClose={() => { setIsStoryModalOpen(false); setSelectedStory(null) }}
+        onSave={handleSaveStory}
+        onDelete={selectedStory ? handleDeleteStory : undefined}
+        userStory={selectedStory}
         projectId={projectId}
+      />
+
+      <SubtaskModal
+        isOpen={isSubtaskModalOpen}
+        onClose={() => { setIsSubtaskModalOpen(false); setSelectedSubtask(null) }}
+        onSave={handleSaveSubtask}
+        onDelete={selectedSubtask ? handleDeleteSubtask : undefined}
+        subtask={selectedSubtask}
+        defaultStatus={subtaskDefaultStatus}
+        teamMembers={teamMembers}
       />
     </>
   )

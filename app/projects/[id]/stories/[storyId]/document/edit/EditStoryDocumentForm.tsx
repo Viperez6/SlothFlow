@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Task, TaskDocument } from '@/lib/types'
+import { UserStoryDocument } from '@/lib/types'
 import { MarkdownEditor } from '@/components/documents/MarkdownEditor'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,16 +14,17 @@ import { ArrowLeft, Save, Loader2, Check } from 'lucide-react'
 import Link from 'next/link'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-interface EditTaskDocumentFormProps {
-  task: Task
-  taskDocument: TaskDocument
+interface EditStoryDocumentFormProps {
+  document: UserStoryDocument
   projectId: string
+  storyId: string
+  storyTitle: string
 }
 
-export function EditTaskDocumentForm({ task, taskDocument, projectId }: EditTaskDocumentFormProps) {
+export function EditStoryDocumentForm({ document: initialDocument, projectId, storyId, storyTitle }: EditStoryDocumentFormProps) {
   const router = useRouter()
-  const [title, setTitle] = useState(taskDocument.title)
-  const [content, setContent] = useState(taskDocument.content)
+  const [title, setTitle] = useState(initialDocument.title)
+  const [content, setContent] = useState(initialDocument.content)
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const supabaseRef = useRef<SupabaseClient | null>(null)
@@ -37,7 +38,7 @@ export function EditTaskDocumentForm({ task, taskDocument, projectId }: EditTask
 
   const saveDocument = useCallback(async (showToast = true) => {
     if (!title.trim()) {
-      if (showToast) toast.error('El título es requerido')
+      if (showToast) toast.error('El titulo es requerido')
       return false
     }
 
@@ -45,13 +46,13 @@ export function EditTaskDocumentForm({ task, taskDocument, projectId }: EditTask
     try {
       const supabase = getSupabase()
       const { error } = await supabase
-        .from('task_documents')
+        .from('user_story_documents')
         .update({
           title: title.trim(),
           content,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', taskDocument.id)
+        .eq('id', initialDocument.id)
 
       if (error) throw error
 
@@ -63,20 +64,18 @@ export function EditTaskDocumentForm({ task, taskDocument, projectId }: EditTask
     } catch (error) {
       console.error('Error saving document:', error)
       if (showToast) {
-        toast.error('Error al guardar', {
-          description: 'No se pudo guardar el documento. Intenta de nuevo.'
-        })
+        toast.error('Error al guardar')
       }
       return false
     } finally {
       setIsSaving(false)
     }
-  }, [title, content, taskDocument.id])
+  }, [title, content, initialDocument.id])
 
   const handleSaveAndReturn = async () => {
     const saved = await saveDocument(true)
     if (saved) {
-      router.push(`/projects/${projectId}/tasks/${task.id}/document`)
+      router.push(`/projects/${projectId}/stories/${storyId}/document`)
     }
   }
 
@@ -86,22 +85,19 @@ export function EditTaskDocumentForm({ task, taskDocument, projectId }: EditTask
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href={`/projects/${projectId}/tasks/${task.id}/document`}>
+          <Link href={`/projects/${projectId}/stories/${storyId}/document`}>
             <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>
           <div>
-            <p className="text-sm text-muted-foreground mb-1">
-              Tarea: {task.title}
-            </p>
+            <p className="text-sm text-muted-foreground">HU: {storyTitle}</p>
             <h1 className="font-display font-bold text-3xl text-sloth-800">
               Editar Documento
             </h1>
-            <div className="flex items-center gap-3 text-muted-foreground text-sm mt-1">
+            <div className="flex items-center gap-3 text-muted-foreground text-sm">
               {lastSaved && (
                 <span className="flex items-center gap-1 text-moss-600">
                   <Check className="w-3.5 h-3.5" />
@@ -119,7 +115,7 @@ export function EditTaskDocumentForm({ task, taskDocument, projectId }: EditTask
         </div>
 
         <div className="flex gap-3">
-          <Link href={`/projects/${projectId}/tasks/${task.id}/document`}>
+          <Link href={`/projects/${projectId}/stories/${storyId}/document`}>
             <Button variant="outline">Cancelar</Button>
           </Link>
           <Button
@@ -137,14 +133,13 @@ export function EditTaskDocumentForm({ task, taskDocument, projectId }: EditTask
         </div>
       </div>
 
-      {/* Form */}
       <Card className="border-moss-100 shadow-sm">
         <CardHeader>
           <CardTitle className="font-display text-xl">Detalles del documento</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Título *</Label>
+            <Label htmlFor="title">Titulo *</Label>
             <Input
               id="title"
               value={title}
@@ -156,7 +151,6 @@ export function EditTaskDocumentForm({ task, taskDocument, projectId }: EditTask
         </CardContent>
       </Card>
 
-      {/* Editor */}
       <div>
         <Label className="mb-2 block">Contenido</Label>
         <MarkdownEditor

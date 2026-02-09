@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import ReactMarkdown from 'react-markdown'
 import { createClient } from '@/lib/supabase'
-import { VotingSession, Vote, Task, Profile, GuestVoter, SLOTH_AVATARS, SlothAvatarId } from '@/lib/types'
+import { VotingSession, Vote, Subtask, UserStory, Profile, GuestVoter, SLOTH_AVATARS, SlothAvatarId, ROLE_LABELS, SUBTASK_TYPES } from '@/lib/types'
 import { SlothAvatarDisplay } from '@/components/SlothAvatarSelector'
-import { ArrowLeft, Eye, EyeOff, Users, Sparkles, CheckCircle2, Trophy, Share2, Copy, RefreshCw, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Users, Sparkles, CheckCircle2, Trophy, Share2, Copy, RefreshCw, AlertCircle, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -43,7 +44,8 @@ export default function VotingPage() {
   const sessionId = params.sessionId as string
 
   const [session, setSession] = useState<VotingSession | null>(null)
-  const [task, setTask] = useState<Task | null>(null)
+  const [subtask, setSubtask] = useState<Subtask | null>(null)
+  const [userStory, setUserStory] = useState<UserStory | null>(null)
   const [votes, setVotes] = useState<Vote[]>([])
   const [currentVoter, setCurrentVoter] = useState<CurrentVoter | null>(null)
   const [myVote, setMyVote] = useState<number | null>(null)
@@ -120,7 +122,6 @@ export default function VotingPage() {
       const { data: { user } } = await supabase.auth.getUser()
 
       if (user) {
-        // Authenticated user
         const { data: profile } = await supabase
           .from('profiles')
           .select('*')
@@ -135,7 +136,6 @@ export default function VotingPage() {
           role: profile?.role,
         })
 
-        // Check for existing vote
         const { data: myVoteData } = await supabase
           .from('votes')
           .select('story_points')
@@ -147,11 +147,9 @@ export default function VotingPage() {
           setMyVote(myVoteData.story_points)
         }
       } else {
-        // Check for guest in localStorage
         const guestData = localStorage.getItem(`guest_${sessionId}`)
 
         if (!guestData) {
-          // No auth and no guest - redirect to join page
           router.push(`/projects/${projectId}/voting/${sessionId}/join`)
           return
         }
@@ -164,7 +162,6 @@ export default function VotingPage() {
           avatar: guest.avatar,
         })
 
-        // Check for existing guest vote
         const { data: myVoteData } = await supabase
           .from('votes')
           .select('story_points')
@@ -185,21 +182,35 @@ export default function VotingPage() {
         .single()
 
       if (sessionError || !sessionData) {
-        toast.error('Sesión no encontrada')
+        toast.error('Sesion no encontrada')
         router.push(`/projects/${projectId}`)
         return
       }
 
       setSession(sessionData)
 
-      // Load task
-      const { data: taskData } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', sessionData.task_id)
-        .single()
+      // Load subtask
+      if (sessionData.subtask_id) {
+        const { data: subtaskData } = await supabase
+          .from('subtasks')
+          .select('*')
+          .eq('id', sessionData.subtask_id)
+          .single()
 
-      setTask(taskData)
+        setSubtask(subtaskData)
+
+        // Load parent user story for context
+        if (subtaskData) {
+          const { data: storyData } = await supabase
+            .from('user_stories')
+            .select('*')
+            .eq('id', subtaskData.user_story_id)
+            .single()
+
+          setUserStory(storyData)
+        }
+      }
+
       await loadVotes()
     } catch (error) {
       console.error('Error loading data:', error)
@@ -241,7 +252,6 @@ export default function VotingPage() {
   const handleVote = async (points: number) => {
     if (voting || !currentVoter || isRevealed) return
 
-    // Don't re-vote the same value
     if (myVote === points) return
 
     setVoting(true)
@@ -251,7 +261,6 @@ export default function VotingPage() {
       const supabase = getSupabase()
 
       if (isChangingVote) {
-        // Update existing vote
         const updateFilter = currentVoter.type === 'user'
           ? { session_id: sessionId, user_id: currentVoter.id }
           : { session_id: sessionId, guest_id: currentVoter.id }
@@ -267,7 +276,6 @@ export default function VotingPage() {
           description: `Has cambiado tu voto a ${points} story points`,
         })
       } else {
-        // Insert new vote
         const voteData = currentVoter.type === 'user'
           ? { session_id: sessionId, user_id: currentVoter.id, story_points: points }
           : { session_id: sessionId, guest_id: currentVoter.id, story_points: points }
@@ -320,22 +328,22 @@ export default function VotingPage() {
   }
 
   const handleConfirmAssignPoints = async () => {
-    if (assigning || !session || pendingPoints === null) return
+    if (assigning || !session || pendingPoints === null || !session.subtask_id) return
 
     setShowConfirmDialog(false)
     setAssigning(true)
     try {
       const supabase = getSupabase()
       const { error } = await supabase
-        .from('tasks')
+        .from('subtasks')
         .update({ story_points: pendingPoints })
-        .eq('id', session.task_id)
+        .eq('id', session.subtask_id)
 
       if (error) throw error
 
       setShowConfetti(true)
       toast.success('Story Points asignados', {
-        description: `La tarea ahora tiene ${pendingPoints} SP`,
+        description: `La subtarea ahora tiene ${pendingPoints} SP`,
       })
 
       setTimeout(() => {
@@ -367,6 +375,11 @@ export default function VotingPage() {
     return votes.filter(v => v.story_points === points).length
   }
 
+  const getRoleLabel = (role: string | null | undefined): string => {
+    if (!role) return 'Developer'
+    return ROLE_LABELS[role] || role
+  }
+
   const getVoterDisplay = (vote: Vote) => {
     if (vote.profiles) {
       return {
@@ -384,11 +397,11 @@ export default function VotingPage() {
         isGuest: true,
       }
     }
-    return { name: 'Anónimo', avatar: 'sloth-default' as SlothAvatarId, role: null, isGuest: true }
+    return { name: 'Anonimo', avatar: 'sloth-default' as SlothAvatarId, role: null, isGuest: true }
   }
 
   if (loading) {
-    return <SlothPageLoader message="Cargando sesión de poker" />
+    return <SlothPageLoader message="Cargando sesion de poker" />
   }
 
   const isRevealed = session?.status === 'revealed'
@@ -401,6 +414,8 @@ export default function VotingPage() {
     ? (voteValues.reduce((a, b) => a + b, 0) / voteValues.length).toFixed(1)
     : 0
   const hasConsensus = voteValues.length > 1 && new Set(voteValues).size === 1
+
+  const subtaskTypeConfig = subtask ? SUBTASK_TYPES[subtask.type] : null
 
   return (
     <div className="min-h-screen bg-organic-gradient">
@@ -443,15 +458,27 @@ export default function VotingPage() {
                 </div>
                 Planning Poker
               </h1>
-              {task && (
-                <p className="text-muted-foreground mt-1">
-                  Estimando: <span className="font-medium text-sloth-700">{task.title}</span>
-                </p>
+              {subtask && (
+                <div className="mt-1">
+                  <p className="text-muted-foreground">
+                    Estimando: <span className="font-medium text-sloth-700">{subtask.title}</span>
+                    {subtaskTypeConfig && (
+                      <Badge className={cn('ml-2 text-[10px] px-1.5 py-0 border-0', subtaskTypeConfig.color)}>
+                        {subtaskTypeConfig.icon} {subtaskTypeConfig.label}
+                      </Badge>
+                    )}
+                  </p>
+                  {userStory && (
+                    <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <BookOpen className="w-3.5 h-3.5" />
+                      HU: {userStory.title}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Share button */}
               <Button
                 variant="outline"
                 size="sm"
@@ -462,7 +489,6 @@ export default function VotingPage() {
                 Invitar
               </Button>
 
-              {/* Live indicator */}
               <div className="flex items-center gap-2 px-3 py-1.5 bg-moss-100 rounded-full">
                 <span className="w-2 h-2 bg-moss-500 rounded-full animate-pulse" />
                 <span className="text-sm font-medium text-moss-700">En vivo</span>
@@ -484,6 +510,17 @@ export default function VotingPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-8">
+        {/* Subtask Description - Markdown rendered */}
+        {subtask?.description && (
+          <Card className="mb-8 border-moss-100">
+            <CardContent className="py-4">
+              <div className="prose prose-sm prose-slate max-w-none prose-headings:font-display prose-headings:text-sloth-800 prose-p:text-gray-600 prose-a:text-moss-600 prose-code:text-moss-700 prose-code:bg-moss-50 prose-code:px-1 prose-code:rounded">
+                <ReactMarkdown>{subtask.description}</ReactMarkdown>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Voting Cards */}
         <section className="mb-8">
           <h2 className="text-lg font-display font-semibold text-sloth-700 mb-4 flex items-center gap-2">
@@ -503,7 +540,7 @@ export default function VotingPage() {
             ) : (
               <>
                 <Sparkles className="w-5 h-5 text-amber-500" />
-                Selecciona tu estimación
+                Selecciona tu estimacion
               </>
             )}
           </h2>
@@ -620,8 +657,8 @@ export default function VotingPage() {
                           <p className="font-medium text-sloth-800 truncate">
                             {voter.name}
                           </p>
-                          <Badge variant="outline" className="text-xs capitalize">
-                            {voter.isGuest ? 'Invitado' : voter.role}
+                          <Badge variant="outline" className="text-xs">
+                            {voter.isGuest ? 'Invitado' : getRoleLabel(voter.role)}
                           </Badge>
                         </div>
                         <div className={cn(
@@ -727,10 +764,10 @@ export default function VotingPage() {
               Confirmar Story Points
             </AlertDialogTitle>
             <AlertDialogDescription className="text-base">
-              ¿Estás seguro de asignar <strong className="text-moss-600">{pendingPoints} story points</strong> a esta tarea?
-              {task && (
+              ¿Estas seguro de asignar <strong className="text-moss-600">{pendingPoints} story points</strong> a esta subtarea?
+              {subtask && (
                 <span className="block mt-2 text-sm text-muted-foreground">
-                  Tarea: {task.title}
+                  Subtarea: {subtask.title}
                 </span>
               )}
             </AlertDialogDescription>

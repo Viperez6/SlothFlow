@@ -2,7 +2,6 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Task } from '@/lib/types'
 import { MarkdownEditor } from '@/components/documents/MarkdownEditor'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,37 +13,16 @@ import { ArrowLeft, Save, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-interface NewTaskDocumentFormProps {
-  task: Task
+interface NewStoryDocumentFormProps {
   projectId: string
+  storyId: string
+  storyTitle: string
 }
 
-const DEFAULT_TEMPLATE = `<h2>Descripción Técnica</h2>
-<p>Describe en detalle la implementación técnica...</p>
-
-<h2>Análisis</h2>
-<p>Detalla el análisis realizado...</p>
-
-<h2>Decisiones de Diseño</h2>
-<ul>
-  <li>Decisión 1: ...</li>
-  <li>Decisión 2: ...</li>
-</ul>
-
-<h2>Consideraciones</h2>
-<p>Aspectos importantes a tener en cuenta...</p>
-
-<h2>Referencias</h2>
-<ul>
-  <li>Recurso 1</li>
-  <li>Recurso 2</li>
-</ul>
-`
-
-export function NewTaskDocumentForm({ task, projectId }: NewTaskDocumentFormProps) {
+export function NewStoryDocumentForm({ projectId, storyId, storyTitle }: NewStoryDocumentFormProps) {
   const router = useRouter()
-  const [title, setTitle] = useState(`Documento: ${task.title}`)
-  const [content, setContent] = useState(DEFAULT_TEMPLATE)
+  const [title, setTitle] = useState('')
+  const [content, setContent] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const supabaseRef = useRef<SupabaseClient | null>(null)
 
@@ -57,35 +35,28 @@ export function NewTaskDocumentForm({ task, projectId }: NewTaskDocumentFormProp
 
   const handleSave = async () => {
     if (!title.trim()) {
-      toast.error('El título es requerido')
+      toast.error('El titulo es requerido')
       return
     }
 
     setIsSaving(true)
     try {
       const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from('task_documents')
+      const { error } = await supabase
+        .from('user_story_documents')
         .insert({
-          task_id: task.id,
+          user_story_id: storyId,
           title: title.trim(),
           content,
         })
-        .select()
-        .single()
 
       if (error) throw error
 
-      toast.success('Documento creado', {
-        description: 'El documento se ha guardado correctamente.'
-      })
-
-      router.push(`/projects/${projectId}/tasks/${task.id}/document`)
+      toast.success('Documento creado')
+      router.push(`/projects/${projectId}/stories/${storyId}/document`)
     } catch (error) {
       console.error('Error saving document:', error)
-      toast.error('Error al guardar', {
-        description: 'No se pudo crear el documento. Intenta de nuevo.'
-      })
+      toast.error('Error al guardar')
     } finally {
       setIsSaving(false)
     }
@@ -93,26 +64,23 @@ export function NewTaskDocumentForm({ task, projectId }: NewTaskDocumentFormProp
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href={`/projects/${projectId}/tasks/${task.id}`}>
+          <Link href={`/projects/${projectId}`}>
             <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>
           <div>
-            <p className="text-sm text-muted-foreground mb-1">
-              Tarea: {task.title}
-            </p>
+            <p className="text-sm text-muted-foreground">HU: {storyTitle}</p>
             <h1 className="font-display font-bold text-3xl text-sloth-800">
-              Nuevo Documento Detallado
+              Nuevo Documento
             </h1>
           </div>
         </div>
 
         <div className="flex gap-3">
-          <Link href={`/projects/${projectId}/tasks/${task.id}`}>
+          <Link href={`/projects/${projectId}`}>
             <Button variant="outline">Cancelar</Button>
           </Link>
           <Button
@@ -130,14 +98,13 @@ export function NewTaskDocumentForm({ task, projectId }: NewTaskDocumentFormProp
         </div>
       </div>
 
-      {/* Form */}
       <Card className="border-moss-100 shadow-sm">
         <CardHeader>
           <CardTitle className="font-display text-xl">Detalles del documento</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Título *</Label>
+            <Label htmlFor="title">Titulo *</Label>
             <Input
               id="title"
               value={title}
@@ -149,7 +116,6 @@ export function NewTaskDocumentForm({ task, projectId }: NewTaskDocumentFormProp
         </CardContent>
       </Card>
 
-      {/* Editor */}
       <div>
         <Label className="mb-2 block">Contenido</Label>
         <MarkdownEditor

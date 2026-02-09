@@ -1,21 +1,19 @@
-import { createClient } from '@/lib/supabase-server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { redirect, notFound } from 'next/navigation'
-import { NewTaskDocumentForm } from './NewTaskDocumentForm'
+import { EditStoryDocumentForm } from './EditStoryDocumentForm'
 
 interface Props {
-  params: { id: string; taskId: string }
+  params: { id: string; storyId: string }
 }
 
-export default async function NewTaskDocumentPage({ params }: Props) {
-  const supabase = await createClient()
+export default async function EditStoryDocumentPage({ params }: Props) {
+  const supabase = await createServerSupabaseClient()
 
-  // Check auth
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     redirect('/login')
   }
 
-  // Get project
   const { data: project, error: projectError } = await supabase
     .from('projects')
     .select('id, name')
@@ -26,34 +24,30 @@ export default async function NewTaskDocumentPage({ params }: Props) {
     redirect('/projects')
   }
 
-  // Get task
-  const { data: task, error: taskError } = await supabase
-    .from('tasks')
-    .select('*')
-    .eq('id', params.taskId)
+  const { data: userStory, error: storyError } = await supabase
+    .from('user_stories')
+    .select('id, title')
+    .eq('id', params.storyId)
     .eq('project_id', params.id)
     .single()
 
-  if (taskError || !task) {
+  if (storyError || !userStory) {
     notFound()
   }
 
-  // Check if document already exists (1:1 relationship)
-  const { data: existingDoc } = await supabase
-    .from('task_documents')
-    .select('id')
-    .eq('task_id', params.taskId)
+  const { data: document, error: docError } = await supabase
+    .from('user_story_documents')
+    .select('*')
+    .eq('user_story_id', params.storyId)
     .maybeSingle()
 
-  if (existingDoc) {
-    // Redirect to edit if document already exists
-    redirect(`/projects/${params.id}/tasks/${params.taskId}/document/edit`)
+  if (docError || !document) {
+    notFound()
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-moss-50 via-earth-50 to-sloth-50">
       <div className="container mx-auto px-4 py-8 max-w-5xl">
-        {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
           <a href="/projects" className="hover:text-moss-600 transition-colors">Proyectos</a>
           <span>/</span>
@@ -61,16 +55,20 @@ export default async function NewTaskDocumentPage({ params }: Props) {
             {project.name}
           </a>
           <span>/</span>
-          <a href={`/projects/${params.id}/tasks/${params.taskId}`} className="hover:text-moss-600 transition-colors">
-            {task.title}
+          <span className="text-muted-foreground">{userStory.title}</span>
+          <span>/</span>
+          <a href={`/projects/${params.id}/stories/${params.storyId}/document`} className="hover:text-moss-600 transition-colors">
+            {document.title}
           </a>
           <span>/</span>
-          <span className="text-sloth-800 font-medium">Nuevo Documento</span>
+          <span className="text-sloth-800 font-medium">Editar</span>
         </nav>
 
-        <NewTaskDocumentForm
-          task={task}
+        <EditStoryDocumentForm
+          document={document}
           projectId={params.id}
+          storyId={params.storyId}
+          storyTitle={userStory.title}
         />
       </div>
     </div>

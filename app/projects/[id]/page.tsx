@@ -35,18 +35,14 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     notFound()
   }
 
-  // Fetch tasks
-  const { data: tasks, error: tasksError } = await supabase
-    .from('tasks')
+  // Fetch user stories
+  const { data: userStories } = await supabase
+    .from('user_stories')
     .select('*')
     .eq('project_id', id)
-    .order('created_at', { ascending: false })
+    .order('sort_order', { ascending: true })
 
-  if (tasksError) {
-    console.error('Error fetching tasks:', tasksError)
-  }
-
-  // Fetch user role (for PM features)
+  // Fetch user role
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -55,34 +51,60 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
   const userRole = profile?.role || null
 
-  // Fetch all task documents and links counts in one query each
-  const taskIds = (tasks || []).map(t => t.id)
+  const storyIds = (userStories || []).map(s => s.id)
 
-  let taskDocsMap: Record<string, boolean> = {}
-  let taskLinksMap: Record<string, number> = {}
+  // Fetch subtasks, acceptance criteria, docs, links in parallel
+  let subtasks: any[] = []
+  let acceptanceCriteria: any[] = []
+  let userStoryDocsMap: Record<string, boolean> = {}
+  let userStoryLinksMap: Record<string, number> = {}
+  let teamMembers: any[] = []
 
-  if (taskIds.length > 0) {
-    // Get which tasks have documents
-    const { data: taskDocs } = await supabase
-      .from('task_documents')
-      .select('task_id')
-      .in('task_id', taskIds)
+  if (storyIds.length > 0) {
+    const [subtasksResult, criteriaResult, docsResult, linksResult, membersResult] = await Promise.all([
+      supabase
+        .from('subtasks')
+        .select('*')
+        .in('user_story_id', storyIds)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('acceptance_criteria')
+        .select('*')
+        .in('user_story_id', storyIds)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('user_story_documents')
+        .select('user_story_id')
+        .in('user_story_id', storyIds),
+      supabase
+        .from('user_story_links')
+        .select('user_story_id')
+        .in('user_story_id', storyIds),
+      supabase
+        .from('profiles')
+        .select('id, full_name, email, avatar, role'),
+    ])
 
-    taskDocsMap = (taskDocs || []).reduce((acc, doc) => {
-      acc[doc.task_id] = true
+    subtasks = subtasksResult.data || []
+    acceptanceCriteria = criteriaResult.data || []
+    teamMembers = membersResult.data || []
+
+    userStoryDocsMap = (docsResult.data || []).reduce((acc: Record<string, boolean>, doc: any) => {
+      acc[doc.user_story_id] = true
       return acc
-    }, {} as Record<string, boolean>)
+    }, {})
 
-    // Get links count per task
-    const { data: taskLinks } = await supabase
-      .from('task_links')
-      .select('task_id')
-      .in('task_id', taskIds)
-
-    taskLinksMap = (taskLinks || []).reduce((acc, link) => {
-      acc[link.task_id] = (acc[link.task_id] || 0) + 1
+    userStoryLinksMap = (linksResult.data || []).reduce((acc: Record<string, number>, link: any) => {
+      acc[link.user_story_id] = (acc[link.user_story_id] || 0) + 1
       return acc
-    }, {} as Record<string, number>)
+    }, {})
+  } else {
+    // Still fetch team members even if no stories
+    const { data: members } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, avatar, role')
+
+    teamMembers = members || []
   }
 
   return (
@@ -143,10 +165,13 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           <TabsContent value="board" className="mt-6">
             <KanbanBoard
               projectId={id}
-              initialTasks={tasks || []}
+              initialUserStories={userStories || []}
+              initialSubtasks={subtasks}
+              initialAcceptanceCriteria={acceptanceCriteria}
               userRole={userRole}
-              taskDocsMap={taskDocsMap}
-              taskLinksMap={taskLinksMap}
+              userStoryDocsMap={userStoryDocsMap}
+              userStoryLinksMap={userStoryLinksMap}
+              teamMembers={teamMembers}
             />
           </TabsContent>
 

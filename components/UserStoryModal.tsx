@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Task, TaskStatus, TaskLink, TaskDocument, LINK_TYPES, LinkType } from '@/lib/types'
+import { UserStory, UserStoryPriority, AcceptanceCriterion, UserStoryLink, UserStoryDocument, USER_STORY_PRIORITIES, LINK_TYPES, LinkType } from '@/lib/types'
 import Link from 'next/link'
-import { Trash2, FileText, Link as LinkIcon, Hash, Layers, Plus, ExternalLink, X, Edit } from 'lucide-react'
+import { Trash2, FileText, Link as LinkIcon, Layers, Plus, ExternalLink, X, Edit, CheckSquare, GripVertical, BookOpen } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -30,36 +31,39 @@ import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-interface TaskModalProps {
+interface UserStoryModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (task: Partial<Task>) => Promise<void>
+  onSave: (story: Partial<UserStory>, criteria: { description: string; is_completed: boolean }[]) => Promise<void>
   onDelete?: () => Promise<void>
-  task?: Task | null
-  projectId?: string
+  userStory?: UserStory | null
+  projectId: string
 }
 
-export default function TaskModal({
+export default function UserStoryModal({
   isOpen,
   onClose,
   onSave,
   onDelete,
-  task,
+  userStory,
   projectId,
-}: TaskModalProps) {
+}: UserStoryModalProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [storyPoints, setStoryPoints] = useState<string>('')
-  const [status, setStatus] = useState<TaskStatus>('backlog')
+  const [priority, setPriority] = useState<UserStoryPriority>('medium')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
+  // Acceptance criteria
+  const [criteria, setCriteria] = useState<{ id?: string; description: string; is_completed: boolean }[]>([])
+  const [newCriterion, setNewCriterion] = useState('')
+
   // Document state
-  const [taskDocument, setTaskDocument] = useState<TaskDocument | null>(null)
+  const [storyDocument, setStoryDocument] = useState<UserStoryDocument | null>(null)
 
   // Links state
-  const [links, setLinks] = useState<TaskLink[]>([])
+  const [links, setLinks] = useState<UserStoryLink[]>([])
   const [loadingData, setLoadingData] = useState(false)
   const [showAddLink, setShowAddLink] = useState(false)
   const [newLinkUrl, setNewLinkUrl] = useState('')
@@ -76,62 +80,90 @@ export default function TaskModal({
   }
 
   useEffect(() => {
-    if (task) {
-      setTitle(task.title)
-      setDescription(task.description || '')
-      setStoryPoints(task.story_points?.toString() || '')
-      setStatus(task.status)
-      loadTaskData(task.id)
+    if (userStory) {
+      setTitle(userStory.title)
+      setDescription(userStory.description || '')
+      setPriority(userStory.priority)
+      loadStoryData(userStory.id)
     } else {
       setTitle('')
       setDescription('')
-      setStoryPoints('')
-      setStatus('backlog')
+      setPriority('medium')
+      setCriteria([])
       setLinks([])
-      setTaskDocument(null)
+      setStoryDocument(null)
     }
     setShowDeleteConfirm(false)
     setShowAddLink(false)
-  }, [task, isOpen])
+  }, [userStory, isOpen])
 
-  const loadTaskData = async (taskId: string) => {
+  const loadStoryData = async (storyId: string) => {
     setLoadingData(true)
     try {
       const supabase = getSupabase()
 
-      // Load task document
-      const { data: docData } = await supabase
-        .from('task_documents')
+      // Load acceptance criteria
+      const { data: criteriaData } = await supabase
+        .from('acceptance_criteria')
         .select('*')
-        .eq('task_id', taskId)
+        .eq('user_story_id', storyId)
+        .order('sort_order', { ascending: true })
+
+      setCriteria((criteriaData || []).map(c => ({
+        id: c.id,
+        description: c.description,
+        is_completed: c.is_completed,
+      })))
+
+      // Load document
+      const { data: docData } = await supabase
+        .from('user_story_documents')
+        .select('*')
+        .eq('user_story_id', storyId)
         .maybeSingle()
 
-      setTaskDocument(docData)
+      setStoryDocument(docData)
 
       // Load links
       const { data: linksData } = await supabase
-        .from('task_links')
+        .from('user_story_links')
         .select('*')
-        .eq('task_id', taskId)
+        .eq('user_story_id', storyId)
         .order('created_at', { ascending: false })
 
       setLinks(linksData || [])
     } catch (error) {
-      console.error('Error loading task data:', error)
+      console.error('Error loading story data:', error)
     } finally {
       setLoadingData(false)
     }
   }
 
+  const handleAddCriterion = () => {
+    if (!newCriterion.trim()) return
+    setCriteria(prev => [...prev, { description: newCriterion.trim(), is_completed: false }])
+    setNewCriterion('')
+  }
+
+  const handleRemoveCriterion = (index: number) => {
+    setCriteria(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleToggleCriterion = (index: number) => {
+    setCriteria(prev => prev.map((c, i) =>
+      i === index ? { ...c, is_completed: !c.is_completed } : c
+    ))
+  }
+
   const handleAddLink = async () => {
-    if (!task || !newLinkUrl.trim()) return
+    if (!userStory || !newLinkUrl.trim()) return
 
     try {
       const supabase = getSupabase()
       const { data, error } = await supabase
-        .from('task_links')
+        .from('user_story_links')
         .insert({
-          task_id: task.id,
+          user_story_id: userStory.id,
           url: newLinkUrl.trim(),
           title: newLinkTitle.trim() || null,
           type: newLinkType,
@@ -155,7 +187,7 @@ export default function TaskModal({
     try {
       const supabase = getSupabase()
       const { error } = await supabase
-        .from('task_links')
+        .from('user_story_links')
         .delete()
         .eq('id', linkId)
 
@@ -173,12 +205,14 @@ export default function TaskModal({
 
     setSaving(true)
     try {
-      await onSave({
-        title: title.trim(),
-        description: description.trim() || null,
-        story_points: storyPoints ? parseInt(storyPoints) : null,
-        status,
-      })
+      await onSave(
+        {
+          title: title.trim(),
+          description: description.trim() || null,
+          priority,
+        },
+        criteria.map(c => ({ description: c.description, is_completed: c.is_completed }))
+      )
       onClose()
     } finally {
       setSaving(false)
@@ -197,27 +231,29 @@ export default function TaskModal({
     }
   }
 
+  const completedCriteria = criteria.filter(c => c.is_completed).length
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg border-moss-100 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display text-xl flex items-center gap-2">
-            {task ? (
+            {userStory ? (
               <>
-                <FileText className="w-5 h-5 text-moss-500" />
-                Editar Tarea
+                <BookOpen className="w-5 h-5 text-moss-500" />
+                Editar Historia de Usuario
               </>
             ) : (
               <>
                 <span className="text-2xl">🦥</span>
-                Nueva Tarea
+                Nueva Historia de Usuario
               </>
             )}
           </DialogTitle>
           <DialogDescription>
-            {task
-              ? 'Modifica los detalles de la tarea'
-              : 'Crea una nueva tarea para tu proyecto'}
+            {userStory
+              ? 'Modifica los detalles de la historia de usuario'
+              : 'Define una historia de usuario con criterios de aceptacion'}
           </DialogDescription>
         </DialogHeader>
 
@@ -226,13 +262,13 @@ export default function TaskModal({
           <div className="space-y-2">
             <Label htmlFor="title" className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-muted-foreground" />
-              Título <span className="text-destructive">*</span>
+              Titulo <span className="text-destructive">*</span>
             </Label>
             <Input
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="¿Qué necesitas hacer?"
+              placeholder="Como usuario quiero..."
               className="font-medium"
               required
             />
@@ -242,76 +278,114 @@ export default function TaskModal({
           <div className="space-y-2">
             <Label htmlFor="description" className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-muted-foreground" />
-              Descripción
+              Descripcion
             </Label>
             <Textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Agrega más detalles sobre la tarea (soporta Markdown)..."
+              placeholder="Describe el valor de negocio y contexto (soporta Markdown)..."
               rows={3}
               className="resize-none"
             />
           </div>
 
+          {/* Priority */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              Prioridad
+            </Label>
+            <Select value={priority} onValueChange={(v) => setPriority(v as UserStoryPriority)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.entries(USER_STORY_PRIORITIES) as [UserStoryPriority, typeof USER_STORY_PRIORITIES[UserStoryPriority]][]).map(([key, config]) => (
+                  <SelectItem key={key} value={key}>
+                    <span className="flex items-center gap-2">
+                      <span className={cn('w-2 h-2 rounded-full', config.dot)} />
+                      {config.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <Separator />
 
-          {/* Story Points & Status */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Acceptance Criteria */}
+          <div className="space-y-3">
+            <Label className="flex items-center gap-2">
+              <CheckSquare className="w-4 h-4 text-muted-foreground" />
+              Criterios de Aceptacion
+              {criteria.length > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  {completedCriteria}/{criteria.length}
+                </Badge>
+              )}
+            </Label>
+
+            {/* Existing criteria */}
             <div className="space-y-2">
-              <Label htmlFor="storyPoints" className="flex items-center gap-2">
-                <Hash className="w-4 h-4 text-muted-foreground" />
-                Story Points
-              </Label>
-              <Input
-                id="storyPoints"
-                type="number"
-                min="0"
-                value={storyPoints}
-                onChange={(e) => setStoryPoints(e.target.value)}
-                placeholder="0"
-              />
+              {criteria.map((criterion, index) => (
+                <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg group">
+                  <Checkbox
+                    checked={criterion.is_completed}
+                    onCheckedChange={() => handleToggleCriterion(index)}
+                  />
+                  <span className={cn(
+                    'flex-1 text-sm',
+                    criterion.is_completed && 'line-through text-muted-foreground'
+                  )}>
+                    {criterion.description}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemoveCriterion(index)}
+                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
             </div>
 
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-muted-foreground" />
-                Estado
-              </Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as TaskStatus)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="backlog">
-                    <span className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-slate-400" />
-                      Backlog
-                    </span>
-                  </SelectItem>
-                  <SelectItem value="in_progress">
-                    <span className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-amber-400" />
-                      En Progreso
-                    </span>
-                  </SelectItem>
-                  <SelectItem value="done">
-                    <span className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-moss-500" />
-                      Completado
-                    </span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Add criterion */}
+            <div className="flex gap-2">
+              <Input
+                value={newCriterion}
+                onChange={(e) => setNewCriterion(e.target.value)}
+                placeholder="Agregar criterio de aceptacion..."
+                className="text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleAddCriterion()
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAddCriterion}
+                disabled={!newCriterion.trim()}
+                className="flex-shrink-0"
+              >
+                <Plus className="w-3 h-3" />
+              </Button>
             </div>
           </div>
 
           {/* Document & Links Section - Only shown when editing */}
-          {task && projectId && (
+          {userStory && projectId && (
             <>
               <Separator />
 
-              {/* Task Document */}
+              {/* Document */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-muted-foreground" />
@@ -319,23 +393,23 @@ export default function TaskModal({
                 </Label>
                 {loadingData ? (
                   <p className="text-sm text-muted-foreground">Cargando...</p>
-                ) : taskDocument ? (
+                ) : storyDocument ? (
                   <div className="flex items-center gap-2 p-2 bg-moss-50 rounded-lg border border-moss-100">
                     <span className="text-sm">📄</span>
-                    <span className="flex-1 text-sm font-medium truncate">{taskDocument.title}</span>
-                    <Link href={`/projects/${projectId}/tasks/${task.id}/document`} onClick={onClose}>
+                    <span className="flex-1 text-sm font-medium truncate">{storyDocument.title}</span>
+                    <Link href={`/projects/${projectId}/stories/${userStory.id}/document`} onClick={onClose}>
                       <Button type="button" variant="ghost" size="sm" className="h-7 text-xs">
                         Ver
                       </Button>
                     </Link>
-                    <Link href={`/projects/${projectId}/tasks/${task.id}/document/edit`} onClick={onClose}>
+                    <Link href={`/projects/${projectId}/stories/${userStory.id}/document/edit`} onClick={onClose}>
                       <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0">
                         <Edit className="w-3 h-3" />
                       </Button>
                     </Link>
                   </div>
                 ) : (
-                  <Link href={`/projects/${projectId}/tasks/${task.id}/document/new`} onClick={onClose}>
+                  <Link href={`/projects/${projectId}/stories/${userStory.id}/document/new`} onClick={onClose}>
                     <Button type="button" variant="outline" size="sm" className="w-full text-xs">
                       <Plus className="w-3 h-3 mr-1" />
                       Crear documento detallado
@@ -365,7 +439,6 @@ export default function TaskModal({
                   </Button>
                 </div>
 
-                {/* Add link form */}
                 {showAddLink && (
                   <div className="space-y-2 p-3 bg-moss-50 rounded-lg">
                     <Input
@@ -378,7 +451,7 @@ export default function TaskModal({
                       <Input
                         value={newLinkTitle}
                         onChange={(e) => setNewLinkTitle(e.target.value)}
-                        placeholder="Título (opcional)"
+                        placeholder="Titulo (opcional)"
                         className="text-sm"
                       />
                       <Select value={newLinkType} onValueChange={(v) => setNewLinkType(v as LinkType)}>
@@ -401,12 +474,7 @@ export default function TaskModal({
                       </Select>
                     </div>
                     <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowAddLink(false)}
-                      >
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddLink(false)}>
                         Cancelar
                       </Button>
                       <Button
@@ -422,7 +490,6 @@ export default function TaskModal({
                   </div>
                 )}
 
-                {/* Links list */}
                 {loadingData ? (
                   <div className="text-center py-2 text-sm text-muted-foreground">
                     Cargando enlaces...
@@ -469,27 +536,15 @@ export default function TaskModal({
           )}
 
           <DialogFooter className="gap-2 sm:gap-0">
-            {/* Delete button */}
-            {task && onDelete && (
+            {userStory && onDelete && (
               <div className="flex-1">
                 {showDeleteConfirm ? (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">¿Seguro?</span>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleDelete}
-                      disabled={deleting}
-                    >
-                      {deleting ? <SlothSpinner /> : 'Sí, eliminar'}
+                    <Button type="button" variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
+                      {deleting ? <SlothSpinner /> : 'Si, eliminar'}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowDeleteConfirm(false)}
-                    >
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowDeleteConfirm(false)}>
                       No
                     </Button>
                   </div>
@@ -508,13 +563,7 @@ export default function TaskModal({
               </div>
             )}
 
-            {/* Action buttons */}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={saving || deleting}
-            >
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving || deleting}>
               Cancelar
             </Button>
             <Button
@@ -527,10 +576,10 @@ export default function TaskModal({
                   <SlothSpinner className="mr-2" />
                   Guardando...
                 </>
-              ) : task ? (
+              ) : userStory ? (
                 'Guardar cambios'
               ) : (
-                'Crear tarea'
+                'Crear historia'
               )}
             </Button>
           </DialogFooter>

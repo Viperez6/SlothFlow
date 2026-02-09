@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase'
-import { SLOTH_AVATARS, SlothAvatarId, Task, VotingSession } from '@/lib/types'
+import { SLOTH_AVATARS, SlothAvatarId, Subtask, VotingSession } from '@/lib/types'
 import { SlothAvatarSelector } from '@/components/SlothAvatarSelector'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,7 +26,7 @@ export default function JoinVotingPage() {
   const [loading, setLoading] = useState(true)
   const [joining, setJoining] = useState(false)
   const [session, setSession] = useState<VotingSession | null>(null)
-  const [task, setTask] = useState<Task | null>(null)
+  const [subtask, setSubtask] = useState<Subtask | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   const supabaseRef = useRef<SupabaseClient | null>(null)
@@ -70,14 +70,16 @@ export default function JoinVotingPage() {
 
       setSession(sessionData)
 
-      // Load task info
-      const { data: taskData } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', sessionData.task_id)
-        .single()
+      // Load subtask info
+      if (sessionData.subtask_id) {
+        const { data: subtaskData } = await supabase
+          .from('subtasks')
+          .select('*')
+          .eq('id', sessionData.subtask_id)
+          .single()
 
-      setTask(taskData)
+        setSubtask(subtaskData)
+      }
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error al cargar la sesión')
@@ -183,12 +185,12 @@ export default function JoinVotingPage() {
         </CardHeader>
 
         <CardContent>
-          {task && (
+          {subtask && (
             <div className="mb-6 p-3 bg-moss-50 rounded-lg border border-moss-100">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
                 Estimando
               </p>
-              <p className="font-medium text-sloth-800">{task.title}</p>
+              <p className="font-medium text-sloth-800">{subtask.title}</p>
             </div>
           )}
 

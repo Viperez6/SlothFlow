@@ -3,61 +3,50 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Draggable } from '@hello-pangea/dnd'
-import { Task } from '@/lib/types'
-import { Loader2, FileText, Sparkles, GripVertical, Link as LinkIcon, SquareStack } from 'lucide-react'
+import { Subtask, SubtaskType, SUBTASK_TYPES, Profile, SLOTH_AVATARS, SlothAvatarId } from '@/lib/types'
+import { Loader2, Sparkles, GripVertical, SquareStack } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { SlothAvatarDisplay } from '@/components/SlothAvatarSelector'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-interface TaskCardProps {
-  task: Task
+interface SubtaskCardProps {
+  subtask: Subtask
   onClick: () => void
   index: number
   isDragEnabled?: boolean
   userRole: string | null
-  hasDocument: boolean
-  linksCount: number
+  projectId: string
+  assignee?: Profile | null
 }
 
-/**
- * Strips markdown syntax from text for clean preview display
- */
 function stripMarkdown(text: string): string {
   return text
-    // Remove headers (## Header)
     .replace(/^#{1,6}\s+/gm, '')
-    // Remove bold/italic (**text**, *text*, __text__, _text_)
     .replace(/(\*\*|__)(.*?)\1/g, '$2')
     .replace(/(\*|_)(.*?)\1/g, '$2')
-    // Remove inline code (`code`)
     .replace(/`([^`]+)`/g, '$1')
-    // Remove links [text](url)
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    // Remove images ![alt](url)
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-    // Remove blockquotes
     .replace(/^>\s+/gm, '')
-    // Remove horizontal rules
     .replace(/^[-*_]{3,}\s*$/gm, '')
-    // Remove list markers
     .replace(/^[\s]*[-*+]\s+/gm, '')
     .replace(/^[\s]*\d+\.\s+/gm, '')
-    // Clean up extra whitespace
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
 
-export default function TaskCard({
-  task,
+export default function SubtaskCard({
+  subtask,
   onClick,
   index,
   isDragEnabled = false,
   userRole,
-  hasDocument,
-  linksCount
-}: TaskCardProps) {
+  projectId,
+  assignee,
+}: SubtaskCardProps) {
   const [isCreating, setIsCreating] = useState(false)
   const router = useRouter()
   const supabaseRef = useRef<SupabaseClient | null>(null)
@@ -84,7 +73,7 @@ export default function TaskCard({
       const { data: session, error } = await supabase
         .from('voting_sessions')
         .insert({
-          task_id: task.id,
+          subtask_id: subtask.id,
           created_by: user.id,
           status: 'voting'
         })
@@ -93,40 +82,31 @@ export default function TaskCard({
 
       if (error) throw error
 
-      router.push(`/projects/${task.project_id}/voting/${session.id}`)
+      router.push(`/projects/${projectId}/voting/${session.id}`)
     } catch (error) {
       console.error('Error:', error)
-      alert('Error al crear sesión de votación')
+      alert('Error al crear sesion de votacion')
     } finally {
       setIsCreating(false)
     }
   }
 
-  const needsEstimation = task.story_points === null || task.story_points === 0
-  const cleanDescription = task.description ? stripMarkdown(task.description) : null
+  const needsEstimation = subtask.story_points === null || subtask.story_points === 0
+  const cleanDescription = subtask.description ? stripMarkdown(subtask.description) : null
+  const typeConfig = SUBTASK_TYPES[subtask.type]
 
   const cardContent = (isDragging: boolean = false) => (
     <div
       onClick={onClick}
       className={cn(
-        // Base styles - clean, minimal
         'group relative bg-white rounded-xl border cursor-pointer',
         'transition-all duration-200 ease-out',
-
-        // Default state
         'border-gray-100 shadow-sm',
-
-        // Hover state
         'hover:shadow-md hover:border-gray-200 hover:-translate-y-0.5',
-
-        // Dragging state
         isDragging && 'shadow-xl rotate-1 scale-[1.02] border-gray-300 ring-2 ring-gray-200/50',
-
-        // Drag enabled cursor
         isDragEnabled && 'cursor-grab active:cursor-grabbing'
       )}
     >
-      {/* Drag Handle - subtle, appears on hover */}
       {isDragEnabled && (
         <div
           className={cn(
@@ -139,67 +119,52 @@ export default function TaskCard({
         </div>
       )}
 
-      {/* Card Content */}
       <div className={cn('p-4', isDragEnabled && 'pl-7')}>
-
-        {/* Header: Title + Sloth indicator */}
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <h4 className={cn(
-            'font-medium text-gray-900 leading-snug',
-            'group-hover:text-gray-700 transition-colors'
-          )}>
-            {task.title}
-          </h4>
-
-          {/* Sloth indicator for unestimated tasks */}
+        {/* Header: Type badge + Title */}
+        <div className="flex items-start gap-2 mb-2">
+          <Badge className={cn('text-[10px] px-1.5 py-0 border-0 flex-shrink-0', typeConfig.color)}>
+            {typeConfig.icon} {typeConfig.label}
+          </Badge>
           {needsEstimation && (
-            <span className="text-xl flex-shrink-0" title="Sin estimar">
+            <span className="text-lg flex-shrink-0 ml-auto" title="Sin estimar">
               🦥
             </span>
           )}
         </div>
 
-        {/* Description Preview - cleaned markdown */}
+        <h4 className={cn(
+          'font-medium text-gray-900 leading-snug mb-1',
+          'group-hover:text-gray-700 transition-colors'
+        )}>
+          {subtask.title}
+        </h4>
+
         {cleanDescription && (
           <p className="text-gray-500 text-sm line-clamp-2 leading-relaxed mb-3">
             {cleanDescription}
           </p>
         )}
 
-        {/* Badges Row */}
+        {/* Bottom row: SP, Hours, Assignee */}
         <div className="flex flex-wrap items-center gap-1.5">
-          {/* Story Points Badge - prominent green */}
-          {task.story_points !== null && task.story_points > 0 && (
+          {subtask.story_points !== null && subtask.story_points > 0 && (
             <Badge className="bg-emerald-600 text-white hover:bg-emerald-700 border-0 text-xs font-semibold px-2 py-0.5">
               <Sparkles className="w-3 h-3 mr-1" />
-              {task.story_points} SP
+              {subtask.story_points} SP
             </Badge>
           )}
 
-          {/* Document Badge - subtle outline */}
-          {hasDocument && (
-            <Badge
-              variant="outline"
-              className="bg-amber-50/80 text-amber-700 border-amber-200/80 text-xs px-2 py-0.5"
-            >
-              <FileText className="w-3 h-3 mr-1" />
-              Doc
-            </Badge>
-          )}
+          {/* Spacer to push assignee to the right */}
+          <div className="flex-1" />
 
-          {/* Links Badge - subtle outline */}
-          {linksCount > 0 && (
-            <Badge
-              variant="outline"
-              className="bg-slate-50 text-slate-600 border-slate-200 text-xs px-2 py-0.5"
-            >
-              <LinkIcon className="w-3 h-3 mr-1" />
-              {linksCount}
-            </Badge>
+          {assignee && (
+            <div className="flex items-center gap-1" title={assignee.full_name || assignee.email || ''}>
+              <SlothAvatarDisplay avatarId={assignee.avatar} size="xs" />
+            </div>
           )}
         </div>
 
-        {/* PM Controls - Planning Poker buttons */}
+        {/* PM Controls - Estimar */}
         {userRole === 'pm' && (
           <div className="mt-3 pt-3 border-t border-gray-100">
             <Button
@@ -230,13 +195,12 @@ export default function TaskCard({
     </div>
   )
 
-  // Only render Draggable when drag is enabled (after client mount)
   if (!isDragEnabled) {
     return cardContent()
   }
 
   return (
-    <Draggable draggableId={task.id} index={index}>
+    <Draggable draggableId={subtask.id} index={index}>
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
